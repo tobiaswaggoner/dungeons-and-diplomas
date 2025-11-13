@@ -18,7 +18,7 @@ User: $ARGUMENTS
 
 ## File Naming and Location
 
-- Save new task files to: `docs/Implementation/2 Backlog/`
+- Save new task files to: `docs/Implementation/02_Backlog/`
 - Naming convention: `Phase{N}-Task{M}-{ShortDescription}.md` or `{ShortDescription}.md`
 - Tasks don't need to be numbered but can be for clarity
 - Use descriptive names that clearly indicate the task purpose

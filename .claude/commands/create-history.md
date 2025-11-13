@@ -8,11 +8,11 @@ Your task is to create a log entry of what was changed within this code base sin
 
 ## Existing files
 
-!`ls -la docs/history`
+!`ls -la docs/History`
 
 ## Template:
 
-!`cat docs/history/template.md`
+!`cat docs/History/template.md`
 
 ## Instructions
 
