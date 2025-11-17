@@ -132,7 +132,11 @@
                 ← → : Move<br>
                 ↓ : Soft Drop<br>
                 ↑ : Rotate<br>
-                Space : Hard Drop
+                Space : Hard Drop<br><br>
+                <strong>💣 Bomb Blocks:</strong><br>
+                Explode on landing!<br>
+                3x3 destruction radius<br>
+                +50 pts per block
             </div>
         </div>
     </div>
@@ -167,7 +171,8 @@
             S: [[0,1,1],[1,1,0]],
             Z: [[1,1,0],[0,1,1]],
             J: [[1,0,0],[1,1,1]],
-            L: [[0,0,1],[1,1,1]]
+            L: [[0,0,1],[1,1,1]],
+            BOMB: [[2,2],[2,2]]  // Special bomb piece (value 2)
         };
 
         const COLORS = {
@@ -177,7 +182,8 @@
             S: '#00f000',
             Z: '#f00000',
             J: '#0000f0',
-            L: '#f0a000'
+            L: '#f0a000',
+            BOMB: '#ff4500'  // Orange-red for bomb
         };
 
         // Game state
@@ -193,11 +199,19 @@
         let dropCounter = 0;
         let dropInterval = 1000;
         let lastTime = 0;
+        let explosionParticles = [];  // Track explosion particles
 
         // Create random piece
         function randomPiece() {
             const shapes = Object.keys(SHAPES);
-            const shape = shapes[Math.floor(Math.random() * shapes.length)];
+            // Bomb appears less frequently (10% chance)
+            let shape;
+            if (Math.random() < 0.1) {
+                shape = 'BOMB';
+            } else {
+                const normalShapes = shapes.filter(s => s !== 'BOMB');
+                shape = normalShapes[Math.floor(Math.random() * normalShapes.length)];
+            }
             return {
                 shape: SHAPES[shape],
                 color: COLORS[shape],
@@ -206,11 +220,20 @@
         }
 
         // Draw a block
-        function drawBlock(x, y, color) {
+        function drawBlock(x, y, color, isBomb = false) {
             ctx.fillStyle = color;
             ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
             ctx.strokeStyle = '#000';
             ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+
+            // Draw bomb symbol
+            if (isBomb) {
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('💣', x * BLOCK_SIZE + BLOCK_SIZE / 2, y * BLOCK_SIZE + BLOCK_SIZE / 2 + 1);
+            }
         }
 
         // Draw the grid
@@ -231,11 +254,37 @@
         function drawPiece() {
             if (!currentPiece) return;
 
+            const isBomb = currentPiece.type === 'BOMB';
             for (let y = 0; y < currentPiece.shape.length; y++) {
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
-                        drawBlock(currentX + x, currentY + y, currentPiece.color);
+                        drawBlock(currentX + x, currentY + y, currentPiece.color, isBomb);
                     }
+                }
+            }
+        }
+
+        // Draw explosion particles
+        function drawExplosions() {
+            for (let i = explosionParticles.length - 1; i >= 0; i--) {
+                const p = explosionParticles[i];
+
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life / 30;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+
+                // Update particle
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.3;  // Gravity
+                p.life--;
+
+                // Remove dead particles
+                if (p.life <= 0) {
+                    explosionParticles.splice(i, 1);
                 }
             }
         }
@@ -263,6 +312,8 @@
 
         // Merge piece to grid
         function merge() {
+            const isBomb = currentPiece.type === 'BOMB';
+
             for (let y = 0; y < currentPiece.shape.length; y++) {
                 for (let x = 0; x < currentPiece.shape[y].length; x++) {
                     if (currentPiece.shape[y][x]) {
@@ -270,10 +321,58 @@
                             gameOver();
                             return;
                         }
-                        grid[currentY + y][currentX + x] = currentPiece.color;
+                        if (!isBomb) {
+                            grid[currentY + y][currentX + x] = currentPiece.color;
+                        }
                     }
                 }
             }
+
+            // Trigger explosion if bomb
+            if (isBomb) {
+                const centerX = currentX + 1;
+                const centerY = currentY + 1;
+                explode(centerX, centerY);
+            }
+        }
+
+        // Explosion mechanic
+        function explode(centerX, centerY) {
+            const radius = 2;  // 3x3 explosion (radius of 2 blocks from center)
+            let blocksDestroyed = 0;
+
+            // Create explosion particles
+            for (let i = 0; i < 20; i++) {
+                explosionParticles.push({
+                    x: centerX * BLOCK_SIZE + BLOCK_SIZE / 2,
+                    y: centerY * BLOCK_SIZE + BLOCK_SIZE / 2,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 30,
+                    color: `hsl(${Math.random() * 60 + 10}, 100%, 50%)`  // Orange to yellow
+                });
+            }
+
+            // Destroy blocks in explosion radius
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const x = centerX + dx;
+                    const y = centerY + dy;
+
+                    // Check if within grid bounds
+                    if (x >= 0 && x < COLS && y >= 0 && y < ROWS) {
+                        // Check if block exists
+                        if (grid[y][x] !== 0) {
+                            grid[y][x] = 0;  // Destroy block
+                            blocksDestroyed++;
+                        }
+                    }
+                }
+            }
+
+            // Award bonus points for destroyed blocks
+            score += blocksDestroyed * 50;
+            updateStats();
         }
 
         // Rotate piece
@@ -411,6 +510,7 @@
 
             drawGrid();
             drawPiece();
+            drawExplosions();  // Draw explosion effects on top
 
             requestAnimationFrame(gameLoop);
         }
