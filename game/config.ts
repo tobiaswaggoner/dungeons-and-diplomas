@@ -1,13 +1,14 @@
 import * as Phaser from "phaser";
+import CombatScene from "./scenes/CombatScene";
 import MainScene from "./scenes/MainScene";
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.WEBGL,
-  width: 800,
-  height: 600,
+  width: window.innerWidth,
+  height: window.innerHeight,
   parent: "phaser-game",
   backgroundColor: "#2d2d2d",
-  scene: [MainScene],
+  scene: [MainScene, CombatScene],
   fps: {
     target: 60,
     forceSetTimeOut: false,
@@ -30,8 +31,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     },
   },
   scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-    resolution: window.devicePixelRatio || 1,
+    mode: Phaser.Scale.RESIZE,
+    autoCenter: Phaser.Scale.NO_CENTER,
   },
 };
