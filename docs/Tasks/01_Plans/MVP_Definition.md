@@ -1,5 +1,7 @@
 # MVP Definition - Educational Dungeon Crawler
 
+MVP = Minimal Viable Product
+
 ## Erstellt
 2025-11-13 - Michi (michi.waggoner@gmail.com)
 

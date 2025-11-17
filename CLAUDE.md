@@ -19,6 +19,10 @@
 
 Finde den aktuellen User z.B. mit `git config user.name`. Wenn unklar: Frage!
 
+## Branch Protection
+
+Der main-Branch ist protected. Stelle sicher, dass nur auf feature/branches gearbeitet wird. Erstelle den Branch nicht selber, sondern erkläre den Junior Devs was sie in der CLI tun müssen.
+
 ### Sprache
 
 Projektsprache, Markdowns, Planungsdokumente, Logs: deutsch
