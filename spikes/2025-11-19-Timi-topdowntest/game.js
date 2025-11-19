@@ -108,8 +108,9 @@ class Player {
         this.score = 0;
         this.inventory = [];
         this.attackCooldown = 0;
-        this.attackRange = 40;
+        this.attackRange = 80; // Increased range
         this.attackDamage = 15;
+        this.attackAngle = 70 * (Math.PI / 180); // 70 degrees in radians
         this.isSlowed = false;
         this.slowTimer = 0;
         this.isInvulnerable = false;
@@ -132,29 +133,51 @@ class Player {
         if (this.hp > this.maxHp) this.hp = this.maxHp;
     }
 
-    attack(enemies) {
+    attack(enemies, mouseX, mouseY) {
         if (this.attackCooldown > 0) return null;
 
+        const playerCenterX = this.x + this.width / 2;
+        const playerCenterY = this.y + this.height / 2;
+
+        // Calculate attack direction based on mouse position
+        const attackDirection = Math.atan2(mouseY - playerCenterY, mouseX - playerCenterX);
+
+        let hitTargets = [];
+
         for (let enemy of enemies) {
-            if (!enemy.isDead && distance(this.x, this.y, enemy.x, enemy.y) < this.attackRange) {
+            if (enemy.isDead) continue;
+
+            const enemyCenterX = enemy.x + enemy.width / 2;
+            const enemyCenterY = enemy.y + enemy.height / 2;
+
+            // Check if enemy is in range
+            const dist = distance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY);
+            if (dist > this.attackRange) continue;
+
+            // Calculate angle to enemy
+            const angleToEnemy = Math.atan2(enemyCenterY - playerCenterY, enemyCenterX - playerCenterX);
+
+            // Calculate angle difference
+            let angleDiff = angleToEnemy - attackDirection;
+            // Normalize angle to -PI to PI
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+            // Check if enemy is within cone angle
+            if (Math.abs(angleDiff) <= this.attackAngle / 2) {
                 enemy.takeDamage(this.attackDamage);
-                this.attackCooldown = 30; // 30 frames cooldown
-                // Return attack info for visual effect
-                return {
-                    x: this.x + this.width / 2,
-                    y: this.y + this.height / 2,
-                    targetX: enemy.x + enemy.width / 2,
-                    targetY: enemy.y + enemy.height / 2
-                };
+                hitTargets.push({
+                    x: playerCenterX,
+                    y: playerCenterY,
+                    targetX: enemyCenterX,
+                    targetY: enemyCenterY
+                });
             }
         }
 
-        // Attack attempted but missed
-        if (this.attackCooldown === 0) {
-            this.attackCooldown = 30;
-        }
+        this.attackCooldown = 30; // 30 frames cooldown
 
-        return null;
+        return hitTargets.length > 0 ? hitTargets : null;
     }
 
     update(room, deltaTime) {
@@ -210,13 +233,29 @@ class Player {
         }
     }
 
-    draw(ctx) {
-        // Draw attack range indicator when attacking
+    draw(ctx, mouseX, mouseY) {
+        const centerX = this.x + this.width / 2;
+        const centerY = this.y + this.height / 2;
+
+        // Draw attack cone indicator when attacking
         if (this.attackCooldown > 25) {
-            ctx.strokeStyle = 'rgba(76, 175, 80, 0.3)';
+            const attackDirection = Math.atan2(mouseY - centerY, mouseX - centerX);
+
+            ctx.fillStyle = 'rgba(76, 175, 80, 0.2)';
+            ctx.strokeStyle = 'rgba(76, 175, 80, 0.4)';
             ctx.lineWidth = 2;
+
             ctx.beginPath();
-            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.attackRange, 0, Math.PI * 2);
+            ctx.moveTo(centerX, centerY);
+            ctx.arc(
+                centerX,
+                centerY,
+                this.attackRange,
+                attackDirection - this.attackAngle / 2,
+                attackDirection + this.attackAngle / 2
+            );
+            ctx.lineTo(centerX, centerY);
+            ctx.fill();
             ctx.stroke();
         }
 
@@ -371,11 +410,15 @@ class Bat {
 
         const dist = distance(this.x, this.y, player.x, player.y);
 
+        // Store old position for collision detection
+        const oldX = this.x;
+        const oldY = this.y;
+
         if (this.state === 'idle') {
             // Patrol or move toward player
             if (dist < 200 && this.dashCooldown === 0) {
                 this.state = 'charging';
-                this.dashCooldown = 120; // 2 seconds
+                this.dashCooldown = 300; // 5 seconds cooldown
             } else {
                 // Simple AI: move toward player slowly
                 const angle = Math.atan2(player.y - this.y, player.x - this.x);
@@ -385,7 +428,7 @@ class Bat {
         } else if (this.state === 'charging') {
             // Prepare to dash
             this.dashTimer++;
-            if (this.dashTimer > 30) { // 0.5 second charge
+            if (this.dashTimer > 60) { // 1 second charge time
                 // Calculate dash direction
                 const angle = Math.atan2(player.y - this.y, player.x - this.x);
                 this.dashDirection.x = Math.cos(angle);
@@ -400,6 +443,17 @@ class Bat {
             this.dashTimer--;
 
             if (this.dashTimer <= 0) {
+                this.state = 'idle';
+                this.dashTimer = 0;
+            }
+        }
+
+        // Check collisions with walls
+        if (room.checkCollision(this)) {
+            this.x = oldX;
+            this.y = oldY;
+            // If dashing and hit wall, stop dashing
+            if (this.state === 'dashing') {
                 this.state = 'idle';
                 this.dashTimer = 0;
             }
@@ -445,7 +499,7 @@ class Bat {
 
         // Attack charge indicator
         if (this.state === 'charging' && this.dashTimer > 0) {
-            const chargeProgress = this.dashTimer / 30;
+            const chargeProgress = this.dashTimer / 60; // Updated to match new charge time
             ctx.fillStyle = '#333';
             ctx.fillRect(this.x, this.y - 12, barWidth, 3);
             ctx.fillStyle = '#ff6b6b';
@@ -520,7 +574,7 @@ class Spider {
 
     shoot(player) {
         if (this.shootCooldown === 0 && !this.isDead) {
-            this.shootCooldown = 240; // 4 seconds (even slower)
+            this.shootCooldown = 360; // 6 seconds (much slower)
             return new Projectile(
                 this.x + this.width / 2,
                 this.y + this.height / 2,
@@ -577,7 +631,7 @@ class Spider {
 
         // Shoot cooldown indicator
         if (this.shootCooldown > 0) {
-            const cooldownProgress = this.shootCooldown / 240; // 240 frames max cooldown
+            const cooldownProgress = this.shootCooldown / 360; // 360 frames max cooldown
             ctx.fillStyle = '#333';
             ctx.fillRect(this.x, this.y - 12, barWidth, 3);
             ctx.fillStyle = '#888';
@@ -1163,16 +1217,18 @@ class Game {
 
         // Player attack (use ' ' for space key)
         if (keys[' ']) {
-            const attackResult = this.player.attack(this.enemies);
-            if (attackResult) {
-                // Add visual attack effect
-                this.attackEffects.push({
-                    x: attackResult.x,
-                    y: attackResult.y,
-                    targetX: attackResult.targetX,
-                    targetY: attackResult.targetY,
-                    lifetime: 15
-                });
+            const attackResults = this.player.attack(this.enemies, mouseX, mouseY);
+            if (attackResults) {
+                // Add visual attack effects for all hits
+                for (let result of attackResults) {
+                    this.attackEffects.push({
+                        x: result.x,
+                        y: result.y,
+                        targetX: result.targetX,
+                        targetY: result.targetY,
+                        lifetime: 15
+                    });
+                }
             }
         }
 
@@ -1275,7 +1331,7 @@ class Game {
             () => {
                 chest.isOpened = true;
                 this.player.score += chest.reward;
-                this.player.heal(20);
+                this.player.heal(30); // Heal 30 HP when opening chest
                 this.mathDialog = null;
             },
             () => {
@@ -1320,9 +1376,9 @@ class Game {
         this.player.x = spawnPos.x;
         this.player.y = spawnPos.y;
 
-        // Give player 3 seconds invulnerability (180 frames at 60fps)
+        // Give player 5 seconds invulnerability (300 frames at 60fps)
         this.player.isInvulnerable = true;
-        this.player.invulnerabilityTimer = 180;
+        this.player.invulnerabilityTimer = 300;
     }
 
     restartGame() {
@@ -1372,7 +1428,7 @@ class Game {
         }
 
         // Draw player
-        this.player.draw(ctx);
+        this.player.draw(ctx, mouseX, mouseY);
 
         // Draw attack effects
         for (let effect of this.attackEffects) {
@@ -1481,14 +1537,20 @@ class Game {
     }
 
     gameLoop(currentTime) {
+        requestAnimationFrame((time) => this.gameLoop(time));
+
         const deltaTime = currentTime - this.lastTime;
+
+        // Don't run if less than a frame has passed (no limiting, just run naturally)
+        if (deltaTime < 1) {
+            return;
+        }
+
         this.lastTime = currentTime;
         this.fps = 1000 / deltaTime;
 
         this.update(deltaTime);
         this.draw();
-
-        requestAnimationFrame((time) => this.gameLoop(time));
     }
 
     start() {
