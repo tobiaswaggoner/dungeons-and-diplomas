@@ -422,8 +422,28 @@ class Bat {
             } else {
                 // Simple AI: move toward player slowly
                 const angle = Math.atan2(player.y - this.y, player.x - this.x);
-                this.x += Math.cos(angle) * this.speed;
-                this.y += Math.sin(angle) * this.speed;
+                const moveX = Math.cos(angle) * this.speed;
+                const moveY = Math.sin(angle) * this.speed;
+
+                this.x += moveX;
+                this.y += moveY;
+
+                // Wall sliding - try to move along walls
+                if (room.checkCollision(this)) {
+                    this.x = oldX;
+                    this.y = oldY;
+
+                    // Try X only
+                    this.x += moveX;
+                    if (room.checkCollision(this)) {
+                        this.x = oldX;
+                        // Try Y only
+                        this.y += moveY;
+                        if (room.checkCollision(this)) {
+                            this.y = oldY;
+                        }
+                    }
+                }
             }
         } else if (this.state === 'charging') {
             // Prepare to dash
@@ -446,14 +466,12 @@ class Bat {
                 this.state = 'idle';
                 this.dashTimer = 0;
             }
-        }
 
-        // Check collisions with walls
-        if (room.checkCollision(this)) {
-            this.x = oldX;
-            this.y = oldY;
-            // If dashing and hit wall, stop dashing
-            if (this.state === 'dashing') {
+            // Check collisions with walls during dash
+            if (room.checkCollision(this)) {
+                this.x = oldX;
+                this.y = oldY;
+                // If dashing and hit wall, stop dashing
                 this.state = 'idle';
                 this.dashTimer = 0;
             }
@@ -549,23 +567,41 @@ class Spider {
         const oldX = this.x;
         const oldY = this.y;
 
+        let moveX = 0;
+        let moveY = 0;
+
         // Keep distance and shoot
         if (dist < 150) {
             // Move away from player
             const angle = Math.atan2(this.y - player.y, this.x - player.x);
-            this.x += Math.cos(angle) * this.speed;
-            this.y += Math.sin(angle) * this.speed;
+            moveX = Math.cos(angle) * this.speed;
+            moveY = Math.sin(angle) * this.speed;
         } else if (dist > 200) {
             // Move toward player
             const angle = Math.atan2(player.y - this.y, player.x - this.x);
-            this.x += Math.cos(angle) * this.speed;
-            this.y += Math.sin(angle) * this.speed;
+            moveX = Math.cos(angle) * this.speed;
+            moveY = Math.sin(angle) * this.speed;
         }
 
-        // Check collisions with walls
+        // Apply movement
+        this.x += moveX;
+        this.y += moveY;
+
+        // Check collisions with walls - with wall sliding
         if (room.checkCollision(this)) {
             this.x = oldX;
             this.y = oldY;
+
+            // Try X only movement
+            this.x += moveX;
+            if (room.checkCollision(this)) {
+                this.x = oldX;
+                // Try Y only movement
+                this.y += moveY;
+                if (room.checkCollision(this)) {
+                    this.y = oldY;
+                }
+            }
         }
 
         // Update cooldown
