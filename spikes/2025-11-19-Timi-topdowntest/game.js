@@ -426,7 +426,7 @@ class Spider {
         this.height = ENEMY_SIZE;
         this.maxHp = 40;
         this.hp = 40;
-        this.speed = 1.5;
+        this.speed = 0.8; // Much slower
         this.isDead = false;
         this.shootCooldown = 0;
         this.damage = 10;
@@ -440,10 +440,14 @@ class Spider {
         }
     }
 
-    update(player) {
+    update(player, room) {
         if (this.isDead) return;
 
         const dist = distance(this.x, this.y, player.x, player.y);
+
+        // Store old position for collision detection
+        const oldX = this.x;
+        const oldY = this.y;
 
         // Keep distance and shoot
         if (dist < 150) {
@@ -456,6 +460,12 @@ class Spider {
             const angle = Math.atan2(player.y - this.y, player.x - this.x);
             this.x += Math.cos(angle) * this.speed;
             this.y += Math.sin(angle) * this.speed;
+        }
+
+        // Check collisions with walls
+        if (room.checkCollision(this)) {
+            this.x = oldX;
+            this.y = oldY;
         }
 
         // Update cooldown
@@ -776,34 +786,61 @@ class Wall {
 
 // ===== ROOM =====
 class Room {
-    constructor() {
+    constructor(seed = 0) {
         this.walls = [];
         this.barrels = [];
         this.floor = '#2a2a2a';
+        this.seed = seed;
         this.createWalls();
         this.createBarrels();
+    }
+
+    // Simple random number generator with seed
+    random() {
+        this.seed = (this.seed * 9301 + 49297) % 233280;
+        return this.seed / 233280;
     }
 
     createWalls() {
         const wallThickness = TILE_SIZE;
 
+        // Outer walls
         this.walls.push(new Wall(0, 0, CANVAS_WIDTH, wallThickness));
         this.walls.push(new Wall(0, CANVAS_HEIGHT - wallThickness, CANVAS_WIDTH, wallThickness));
         this.walls.push(new Wall(0, 0, wallThickness, CANVAS_HEIGHT));
         this.walls.push(new Wall(CANVAS_WIDTH - wallThickness, 0, wallThickness, CANVAS_HEIGHT));
 
-        // Internal walls
-        this.walls.push(new Wall(wallThickness, wallThickness + 80, 200, wallThickness));
-        this.walls.push(new Wall(wallThickness + 200, wallThickness, wallThickness, 80));
-        this.walls.push(new Wall(wallThickness + 100, CANVAS_HEIGHT - wallThickness - 120, wallThickness, 80));
-        this.walls.push(new Wall(wallThickness + 100, CANVAS_HEIGHT - wallThickness - 120, 140, wallThickness));
-        this.walls.push(new Wall(CANVAS_WIDTH - wallThickness * 2 - 100, wallThickness + 100, wallThickness, 200));
+        // Generate random internal walls (3-6 walls)
+        const numWalls = Math.floor(this.random() * 4) + 3;
+
+        for (let i = 0; i < numWalls; i++) {
+            const horizontal = this.random() > 0.5;
+
+            if (horizontal) {
+                // Horizontal wall
+                const x = Math.floor(this.random() * (CANVAS_WIDTH - 300)) + 100;
+                const y = Math.floor(this.random() * (CANVAS_HEIGHT - 200)) + 100;
+                const width = Math.floor(this.random() * 150) + 100;
+                this.walls.push(new Wall(x, y, width, wallThickness));
+            } else {
+                // Vertical wall
+                const x = Math.floor(this.random() * (CANVAS_WIDTH - 200)) + 100;
+                const y = Math.floor(this.random() * (CANVAS_HEIGHT - 300)) + 100;
+                const height = Math.floor(this.random() * 150) + 100;
+                this.walls.push(new Wall(x, y, wallThickness, height));
+            }
+        }
     }
 
     createBarrels() {
-        this.barrels.push(new Barrel(150, 250));
-        this.barrels.push(new Barrel(450, 180));
-        this.barrels.push(new Barrel(600, 400));
+        // Generate random barrels (2-5 barrels)
+        const numBarrels = Math.floor(this.random() * 4) + 2;
+
+        for (let i = 0; i < numBarrels; i++) {
+            const x = Math.floor(this.random() * (CANVAS_WIDTH - 200)) + 100;
+            const y = Math.floor(this.random() * (CANVAS_HEIGHT - 200)) + 100;
+            this.barrels.push(new Barrel(x, y));
+        }
     }
 
     checkCollision(entity) {
@@ -951,7 +988,8 @@ class MathDialog {
 // ===== GAME =====
 class Game {
     constructor() {
-        this.room = new Room();
+        this.levelNumber = 1;
+        this.room = new Room(Date.now()); // Random seed based on timestamp
         this.player = new Player(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
         this.enemies = [];
         this.projectiles = [];
@@ -981,20 +1019,37 @@ class Game {
     }
 
     initLevel() {
-        // Create enemies
-        this.enemies.push(new Bat(200, 150));
-        this.enemies.push(new Spider(550, 200));
-        this.enemies.push(new Spider(650, 450));
+        // Generate random enemy count based on level
+        const numBats = Math.min(Math.floor(Math.random() * 2) + 1, 1 + Math.floor(this.levelNumber / 2));
+        const numSpiders = Math.min(Math.floor(Math.random() * 3) + 1, 2 + Math.floor(this.levelNumber / 3));
 
-        // Create chests
-        this.chests.push(new Chest(120, 180, generateMathProblem(1)));
-        this.chests.push(new Chest(520, 350, generateMathProblem(2)));
+        // Create enemies at random positions
+        for (let i = 0; i < numBats; i++) {
+            const x = Math.random() * (CANVAS_WIDTH - 200) + 100;
+            const y = Math.random() * (CANVAS_HEIGHT - 200) + 100;
+            this.enemies.push(new Bat(x, y));
+        }
 
-        // Create exit door
+        for (let i = 0; i < numSpiders; i++) {
+            const x = Math.random() * (CANVAS_WIDTH - 200) + 100;
+            const y = Math.random() * (CANVAS_HEIGHT - 200) + 100;
+            this.enemies.push(new Spider(x, y));
+        }
+
+        // Create chests at random positions (1-3 chests)
+        const numChests = Math.floor(Math.random() * 3) + 1;
+        for (let i = 0; i < numChests; i++) {
+            const x = Math.random() * (CANVAS_WIDTH - 200) + 100;
+            const y = Math.random() * (CANVAS_HEIGHT - 200) + 100;
+            const difficulty = Math.min(Math.floor(this.levelNumber / 2) + 1, 5);
+            this.chests.push(new Chest(x, y, generateMathProblem(difficulty)));
+        }
+
+        // Create exit door at top center
         this.exitDoor = new ExitDoor(
             CANVAS_WIDTH / 2 - TILE_SIZE / 2,
             TILE_SIZE,
-            generateMathProblem(3)
+            generateMathProblem(Math.min(this.levelNumber, 5))
         );
     }
 
@@ -1154,6 +1209,16 @@ class Game {
     }
 
     nextLevel() {
+        // Increment level
+        this.levelNumber++;
+
+        // Generate new room with new random seed
+        this.room = new Room(Date.now() + this.levelNumber);
+
+        // Reset player position to center
+        this.player.x = CANVAS_WIDTH / 2 - PLAYER_SIZE / 2;
+        this.player.y = CANVAS_HEIGHT / 2 - PLAYER_SIZE / 2;
+
         // Reset level
         this.gameTime = 0;
         this.enemies = [];
@@ -1166,6 +1231,8 @@ class Game {
 
     restartGame() {
         // Complete restart
+        this.levelNumber = 1;
+        this.room = new Room(Date.now());
         this.player = new Player(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
         this.gameTime = 0;
         this.enemies = [];
@@ -1300,6 +1367,11 @@ class Game {
         ctx.fillStyle = '#FFD700';
         ctx.font = 'bold 16px Arial';
         ctx.fillText(`Score: ${this.player.score}`, 10, 50);
+
+        // Level
+        ctx.fillStyle = '#4CAF50';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText(`Level: ${this.levelNumber}`, 10, 75);
 
         // FPS
         ctx.fillStyle = '#888';
