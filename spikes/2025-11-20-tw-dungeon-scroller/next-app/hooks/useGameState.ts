@@ -1,0 +1,223 @@
+import { useState, useRef, useEffect } from 'react';
+import type { Player } from '@/lib/Enemy';
+import type { QuestionDatabase } from '@/lib/questions';
+import { DIRECTION, PLAYER_MAX_HP } from '@/lib/constants';
+import { DungeonManager } from '@/lib/game/DungeonManager';
+import { GameEngine } from '@/lib/game/GameEngine';
+import { GameRenderer } from '@/lib/rendering/GameRenderer';
+import { MinimapRenderer } from '@/lib/rendering/MinimapRenderer';
+
+interface UseGameStateProps {
+  questionDatabase: QuestionDatabase | null;
+  availableSubjects: string[];
+  onPlayerHpUpdate: (hp: number) => void;
+}
+
+export function useGameState({
+  questionDatabase,
+  availableSubjects,
+  onPlayerHpUpdate
+}: UseGameStateProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const minimapRef = useRef<HTMLCanvasElement>(null);
+  const [gameInitialized, setGameInitialized] = useState(false);
+  const gamePausedRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const isInitializingRef = useRef(false);
+  const gameLoopIdRef = useRef<number | null>(null);
+  const lastTimeRef = useRef(0);
+
+  const playerRef = useRef<Player>({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    direction: DIRECTION.DOWN,
+    isMoving: false,
+    hp: PLAYER_MAX_HP,
+    maxHp: PLAYER_MAX_HP
+  });
+
+  const keysRef = useRef({
+    ArrowUp: false,
+    ArrowDown: false,
+    ArrowLeft: false,
+    ArrowRight: false,
+    w: false,
+    s: false,
+    a: false,
+    d: false
+  });
+
+  const dungeonManagerRef = useRef<DungeonManager | null>(null);
+  const gameEngineRef = useRef<GameEngine>(new GameEngine());
+  const gameRendererRef = useRef<GameRenderer>(new GameRenderer());
+  const minimapRendererRef = useRef<MinimapRenderer>(new MinimapRenderer());
+
+  const generateNewDungeon = async () => {
+    if (!dungeonManagerRef.current) return;
+    await dungeonManagerRef.current.generateNewDungeon(availableSubjects);
+    playerRef.current.hp = PLAYER_MAX_HP;
+    onPlayerHpUpdate(PLAYER_MAX_HP);
+  };
+
+  // Combat state will be injected
+  const inCombatRef = useRef(false);
+  const startCombatRef = useRef<(enemy: any) => void>(() => {});
+
+  const update = (dt: number) => {
+    if (isNaN(dt)) dt = 0;
+    if (!dungeonManagerRef.current) return;
+
+    const engine = gameEngineRef.current;
+    const manager = dungeonManagerRef.current;
+
+    engine.updatePlayer(
+      dt,
+      playerRef.current,
+      keysRef.current,
+      manager.tileSize,
+      manager.dungeon,
+      manager.roomMap,
+      manager.rooms,
+      manager.playerSprite,
+      inCombatRef.current
+    );
+
+    engine.updateEnemies(
+      dt,
+      manager.enemies,
+      playerRef.current,
+      manager.tileSize,
+      manager.rooms,
+      manager.dungeon,
+      manager.roomMap,
+      startCombatRef.current,
+      inCombatRef.current
+    );
+  };
+
+  const render = () => {
+    const canvas = canvasRef.current;
+    const minimap = minimapRef.current;
+    if (!canvas || !minimap || !dungeonManagerRef.current) return;
+
+    const manager = dungeonManagerRef.current;
+
+    gameRendererRef.current.render(
+      canvas,
+      playerRef.current,
+      manager.dungeon,
+      manager.tileVariants,
+      manager.roomMap,
+      manager.rooms,
+      manager.enemies,
+      manager.playerSprite,
+      manager.tileSize
+    );
+
+    minimapRendererRef.current.render(
+      minimap,
+      playerRef.current,
+      manager.dungeon,
+      manager.roomMap,
+      manager.rooms,
+      manager.tileSize
+    );
+  };
+
+  const gameLoop = (timestamp: number) => {
+    if (!gamePausedRef.current) {
+      const dt = (timestamp - lastTimeRef.current) / 1000;
+      lastTimeRef.current = timestamp;
+
+      update(dt);
+      render();
+    }
+
+    gameLoopIdRef.current = requestAnimationFrame(gameLoop);
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    const initGame = async () => {
+      if (!isMountedRef.current || isInitializingRef.current) {
+        return;
+      }
+
+      if (!questionDatabase) {
+        return;
+      }
+
+      isInitializingRef.current = true;
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      // Load tileset
+      await gameRendererRef.current.loadTileset();
+
+      // Initialize dungeon manager
+      const dungeonManager = new DungeonManager(playerRef.current);
+      await dungeonManager.initialize(availableSubjects);
+      dungeonManagerRef.current = dungeonManager;
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setGameInitialized(true);
+      gameLoopIdRef.current = requestAnimationFrame(gameLoop);
+    };
+
+    initGame();
+
+    const handleResize = () => {
+      if (canvasRef.current) {
+        canvasRef.current.width = window.innerWidth;
+        canvasRef.current.height = window.innerHeight;
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (keysRef.current.hasOwnProperty(e.key)) {
+        (keysRef.current as any)[e.key] = true;
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (keysRef.current.hasOwnProperty(e.key)) {
+        (keysRef.current as any)[e.key] = false;
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      isMountedRef.current = false;
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      if (gameLoopIdRef.current) {
+        cancelAnimationFrame(gameLoopIdRef.current);
+      }
+    };
+  }, [questionDatabase, availableSubjects]);
+
+  return {
+    canvasRef,
+    minimapRef,
+    gameInitialized,
+    gamePausedRef,
+    playerRef,
+    inCombatRef,
+    startCombatRef,
+    generateNewDungeon
+  };
+}
