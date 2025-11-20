@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/db';
+import { calculateRoundedElo, type AnswerRecord } from '@/lib/scoring/EloCalculator';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,16 +42,16 @@ export async function GET(request: Request) {
       timeout_occurred: number;
     }>;
 
-    // Group by question and calculate stats
+    // Group by question and build answer history
     const questionStats = new Map<number, {
       id: number;
       subject_key: string;
       subject_name: string;
       question: string;
+      answers: AnswerRecord[];
       correct: number;
       wrong: number;
       timeout: number;
-      elo: number;
     }>();
 
     for (const row of rows) {
@@ -60,27 +61,28 @@ export async function GET(request: Request) {
           subject_key: row.subject_key,
           subject_name: row.subject_name,
           question: row.question,
+          answers: [],
           correct: 0,
           wrong: 0,
-          timeout: 0,
-          elo: 5 // Initial ELO
+          timeout: 0
         });
       }
 
       const stats = questionStats.get(row.id)!;
 
+      // Add answer to history
+      stats.answers.push({
+        is_correct: row.is_correct === 1,
+        timeout_occurred: row.timeout_occurred === 1
+      });
+
+      // Update counts
       if (row.timeout_occurred) {
         stats.timeout++;
-        // Timeout counts as wrong for ELO (sanftere Formel)
-        stats.elo = Math.floor((stats.elo - (stats.elo - 1) / 4) * 10) / 10;
       } else if (row.is_correct) {
         stats.correct++;
-        // Sanftere Formel für Aufstieg
-        stats.elo = Math.ceil((stats.elo + (10 - stats.elo) / 3) * 10) / 10;
       } else {
         stats.wrong++;
-        // Sanftere Formel für Abstieg
-        stats.elo = Math.floor((stats.elo - (stats.elo - 1) / 4) * 10) / 10;
       }
     }
 
@@ -97,7 +99,8 @@ export async function GET(request: Request) {
         };
       }
 
-      const roundedElo = Math.round(stats.elo);
+      // Calculate ELO using progressive algorithm
+      const elo = calculateRoundedElo(stats.answers);
 
       bySubject[stats.subject_key].questions.push({
         id: stats.id,
@@ -105,11 +108,11 @@ export async function GET(request: Request) {
         correct: stats.correct,
         wrong: stats.wrong,
         timeout: stats.timeout,
-        elo: roundedElo
+        elo: elo
       });
 
       // Accumulate for average
-      bySubject[stats.subject_key].total_elo += roundedElo;
+      bySubject[stats.subject_key].total_elo += elo;
       bySubject[stats.subject_key].question_count += 1;
     });
 

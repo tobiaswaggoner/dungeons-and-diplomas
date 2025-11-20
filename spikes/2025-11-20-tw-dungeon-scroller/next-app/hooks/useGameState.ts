@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { Player } from '@/lib/Enemy';
 import type { QuestionDatabase } from '@/lib/questions';
 import { DIRECTION, PLAYER_MAX_HP } from '@/lib/constants';
+import type { KeyboardState } from '@/lib/constants';
 import { DungeonManager } from '@/lib/game/DungeonManager';
 import { GameEngine } from '@/lib/game/GameEngine';
 import { GameRenderer } from '@/lib/rendering/GameRenderer';
@@ -38,7 +39,7 @@ export function useGameState({
     maxHp: PLAYER_MAX_HP
   });
 
-  const keysRef = useRef({
+  const keysRef = useRef<KeyboardState>({
     ArrowUp: false,
     ArrowDown: false,
     ArrowLeft: false,
@@ -184,14 +185,14 @@ export function useGameState({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (keysRef.current.hasOwnProperty(e.key)) {
-        (keysRef.current as any)[e.key] = true;
+      if (e.key in keysRef.current) {
+        keysRef.current[e.key as keyof KeyboardState] = true;
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (keysRef.current.hasOwnProperty(e.key)) {
-        (keysRef.current as any)[e.key] = false;
+      if (e.key in keysRef.current) {
+        keysRef.current[e.key as keyof KeyboardState] = false;
       }
     };
 

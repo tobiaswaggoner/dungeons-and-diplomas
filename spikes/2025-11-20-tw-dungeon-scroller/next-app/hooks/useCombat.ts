@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import type { Enemy } from '@/lib/Enemy';
 import type { Player } from '@/lib/Enemy';
 import type { Question, QuestionDatabase } from '@/lib/questions';
-import { COMBAT_TIME_LIMIT, DAMAGE_CORRECT, DAMAGE_WRONG, PLAYER_MAX_HP } from '@/lib/constants';
+import { COMBAT_TIME_LIMIT, COMBAT_FEEDBACK_DELAY, DAMAGE_CORRECT, DAMAGE_WRONG, PLAYER_MAX_HP } from '@/lib/constants';
 import { selectQuestion } from '@/lib/combat/QuestionSelector';
 
 interface UseCombatProps {
@@ -147,9 +147,9 @@ export function useCombat({
     setEnemyHp(currentEnemyRef.current.hp);
 
     if (!currentEnemyRef.current.alive || playerRef.current.hp <= 0) {
-      setTimeout(() => endCombat(), 1500);
+      setTimeout(() => endCombat(), COMBAT_FEEDBACK_DELAY);
     } else {
-      setTimeout(() => askQuestion(), 1500);
+      setTimeout(() => askQuestion(), COMBAT_FEEDBACK_DELAY);
     }
   };
 

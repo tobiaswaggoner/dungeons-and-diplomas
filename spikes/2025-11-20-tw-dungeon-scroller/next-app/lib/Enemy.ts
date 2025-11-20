@@ -1,6 +1,8 @@
 import { SpriteSheetLoader } from './SpriteSheetLoader';
-import { DIRECTION, ANIMATION, AI_STATE, ENEMY_SPEED_TILES, ENEMY_AGGRO_RADIUS, ENEMY_DEAGGRO_RADIUS, ENEMY_IDLE_WAIT_TIME, GOBLIN_MAX_HP, PLAYER_SIZE, TILE, DUNGEON_WIDTH, DUNGEON_HEIGHT } from './constants';
+import { DIRECTION, ANIMATION, AI_STATE, ENEMY_SPEED_TILES, ENEMY_AGGRO_RADIUS, ENEMY_DEAGGRO_RADIUS, ENEMY_IDLE_WAIT_TIME, ENEMY_WAYPOINT_THRESHOLD, COMBAT_TRIGGER_DISTANCE, GOBLIN_MAX_HP, TILE, DUNGEON_WIDTH, DUNGEON_HEIGHT } from './constants';
 import type { Direction, AIStateType, TileType, Room } from './constants';
+import { CollisionDetector } from './physics/CollisionDetector';
+import { DirectionCalculator } from './movement/DirectionCalculator';
 
 export interface Player {
   x: number;
@@ -137,7 +139,7 @@ export class Enemy {
       const dy = this.waypoint.y - this.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance < 5) {
+      if (distance < ENEMY_WAYPOINT_THRESHOLD) {
         // Reached waypoint
         this.aiState = AI_STATE.IDLE;
         this.idleTimer = ENEMY_IDLE_WAIT_TIME;
@@ -161,11 +163,7 @@ export class Enemy {
         }
 
         // Update direction
-        if (Math.abs(dx) > Math.abs(dy)) {
-          this.direction = dx > 0 ? DIRECTION.RIGHT : DIRECTION.LEFT;
-        } else {
-          this.direction = dy > 0 ? DIRECTION.DOWN : DIRECTION.UP;
-        }
+        this.direction = DirectionCalculator.calculateDirection(dx, dy);
 
         this.sprite.playAnimation(this.direction, ANIMATION.WALK);
       }
@@ -176,7 +174,7 @@ export class Enemy {
       const dy = (player.y + tileSize / 2) - (this.y + tileSize / 2);
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance > tileSize / 2) {
+      if (distance > tileSize * COMBAT_TRIGGER_DISTANCE) {
         // Move towards player
         const speed = ENEMY_SPEED_TILES * tileSize * dt;
         const moveX = (dx / distance) * speed;
@@ -194,11 +192,7 @@ export class Enemy {
         }
 
         // Update direction
-        if (Math.abs(dx) > Math.abs(dy)) {
-          this.direction = dx > 0 ? DIRECTION.RIGHT : DIRECTION.LEFT;
-        } else {
-          this.direction = dy > 0 ? DIRECTION.DOWN : DIRECTION.UP;
-        }
+        this.direction = DirectionCalculator.calculateDirection(dx, dy);
 
         this.sprite.playAnimation(this.direction, ANIMATION.RUN);
       } else {
@@ -229,34 +223,7 @@ export class Enemy {
   }
 
   checkCollision(x: number, y: number, tileSize: number, dungeon: TileType[][]): boolean {
-    const enemySize = tileSize * PLAYER_SIZE;
-    const margin = (tileSize - enemySize) / 2;
-
-    const left = x + margin;
-    const right = x + tileSize - margin;
-    const top = y + margin;
-    const bottom = y + tileSize - margin;
-
-    const points = [
-      { x: left, y: top },
-      { x: right, y: top },
-      { x: left, y: bottom },
-      { x: right, y: bottom }
-    ];
-
-    for (let p of points) {
-      const tileX = Math.floor(p.x / tileSize);
-      const tileY = Math.floor(p.y / tileSize);
-
-      if (tileX < 0 || tileX >= DUNGEON_WIDTH || tileY < 0 || tileY >= DUNGEON_HEIGHT) {
-        return true;
-      }
-
-      if (dungeon[tileY][tileX] === TILE.WALL || dungeon[tileY][tileX] === TILE.EMPTY) {
-        return true;
-      }
-    }
-    return false;
+    return CollisionDetector.checkCollision(x, y, tileSize, dungeon);
   }
 
   draw(ctx: CanvasRenderingContext2D, rooms: Room[], tileSize: number) {

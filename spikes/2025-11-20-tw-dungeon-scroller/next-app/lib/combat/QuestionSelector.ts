@@ -1,4 +1,5 @@
 import type { Enemy } from '../Enemy';
+import { shuffleAnswers } from './AnswerShuffler';
 
 export async function selectQuestion(
   enemy: Enemy,
@@ -55,23 +56,10 @@ export async function selectQuestion(
   askedQuestions.add(selectedQuestion.id);
 
   // Shuffle answers
-  const correctAnswerText = selectedQuestion.answers[selectedQuestion.correct];
-  const indices = selectedQuestion.answers.map((_: any, i: number) => i);
-  for (let i = indices.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [indices[i], indices[j]] = [indices[j], indices[i]];
-  }
-
-  const shuffledAnswers = indices.map((i: string | number) => selectedQuestion.answers[i]);
-  const correctIndex = shuffledAnswers.indexOf(correctAnswerText);
-
-  console.log('Selected question:', {
-    id: selectedQuestion.id,
-    question: selectedQuestion.question,
-    elo: selectedQuestion.elo,
-    enemyLevel: enemy.level,
-    maxElo: maxElo
-  });
+  const { shuffledAnswers, correctIndex } = shuffleAnswers(
+    selectedQuestion.answers,
+    selectedQuestion.correct
+  );
 
   return {
     ...selectedQuestion,

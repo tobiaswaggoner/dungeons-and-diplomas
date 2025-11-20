@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an educational browser-based dungeon crawler with procedural dungeon generation, real-time combat, and quiz-based enemy encounters. Built as a proof-of-concept in vanilla JavaScript, this project is designed to be refactored into a Next.js application with dynamic data loading and persistence.
+Educational browser-based dungeon crawler with procedural dungeon generation, real-time combat, and quiz-based enemy encounters. Originally built as a vanilla JavaScript prototype (dungeon.html), now fully migrated to a Next.js application with SQLite database, ELO-based difficulty system, and persistent progress tracking.
 
 ### Core Features
 
@@ -12,344 +12,853 @@ This is an educational browser-based dungeon crawler with procedural dungeon gen
 - **Character System**: Player and enemy sprites with full directional animation support (14 animation types)
 - **AI-Driven Enemies**: Goblins with idle, wandering, and player-following behaviors
 - **Quiz-Based Combat**: Educational combat system with timed multiple-choice questions
+- **ELO Difficulty System**: Dynamic question difficulty based on player performance
+- **Progress Tracking**: SQLite database logs all answers with timestamps
+- **Statistics Dashboard**: Per-question breakdown and subject mastery visualization
 - **Fog of War**: Progressive room revelation as player explores
 - **Room Types**: Empty, treasure, and combat rooms with visual differentiation
 - **Minimap**: Real-time overview of explored areas
 
-## Architecture
+## Project Structure
 
-### Single-File Prototype
-Currently implemented as `dungeon.html` - a single HTML file with embedded JavaScript, CSS, and external question database. No build process required - simply open in a browser or serve via local HTTP server.
+This spike/prototype contains two implementations:
 
-**This is a spike/prototype** intended for migration to Next.js for:
-- Dynamic question loading from database/API
-- Progress persistence
-- User authentication
-- Extended educational content
-- Analytics and performance tracking
+1. **dungeon.html**: Original vanilla JavaScript single-file prototype
+2. **next-app/**: Production Next.js application (current focus)
 
-### Core Systems
+## Architecture (Next.js Implementation)
 
-**1. Dungeon Generation (BSP-based)**
-- `BSPNode` class implements recursive binary space partitioning (dungeon.html:989-1110)
-- `generateRooms()` creates BSP tree and fills partitions with floor tiles (dungeon.html:1112-1135)
-- `connectRooms()` uses Union-Find algorithm to ensure full connectivity (dungeon.html:1162-1248)
-- Room type distribution: 70% empty, 20% treasure, 10% combat (dungeon.html:1061-1069)
-- Constants: `MIN_ROOM_SIZE=4`, `MAX_ROOM_SIZE=8`, grid size 100×100
+### File Structure
 
-**2. Sprite System**
-- `SpriteSheetLoader` class handles spritesheet parsing and animation (dungeon.html:192-304)
-- Embedded spritesheet configurations avoid CORS issues (dungeon.html:139-180)
+```
+next-app/
+├── app/
+│   ├── layout.tsx                      # Root layout with metadata
+│   ├── page.tsx                        # Main page (renders GameCanvas)
+│   └── api/                            # API Routes
+│       ├── questions/route.ts          # GET all questions grouped by subject
+│       ├── questions-with-elo/route.ts # GET questions with ELO for subject/user
+│       ├── answers/route.ts            # POST answer log entry
+│       ├── stats/route.ts              # GET user statistics
+│       ├── subjects/route.ts           # GET all distinct subjects
+│       ├── session-elo/route.ts        # GET session ELO scores per subject
+│       └── auth/
+│           ├── login/route.ts          # POST login/register user
+│           └── logout/route.ts         # POST logout
+├── components/
+│   ├── GameCanvas.tsx                  # Main game orchestrator
+│   ├── CombatModal.tsx                 # Combat UI overlay
+│   ├── CharacterPanel.tsx              # Top-left user panel with ELO display
+│   ├── LoginModal.tsx                  # Login/registration modal
+│   └── SkillDashboard.tsx              # Full-screen statistics dashboard
+├── hooks/
+│   ├── useAuth.ts                      # Authentication state management
+│   ├── useScoring.ts                   # Session ELO tracking
+│   ├── useCombat.ts                    # Combat logic and state
+│   └── useGameState.ts                 # Game engine and rendering loop
+├── lib/
+│   ├── constants.ts                    # Game constants and TypeScript types
+│   ├── db.ts                           # SQLite database operations
+│   ├── questions.ts                    # Question types and legacy data
+│   ├── SpriteSheetLoader.ts            # Sprite animation system
+│   ├── Enemy.ts                        # Enemy class with AI
+│   ├── combat/
+│   │   └── QuestionSelector.ts         # ELO-based question selection algorithm
+│   ├── dungeon/
+│   │   ├── BSPNode.ts                  # Binary Space Partitioning tree
+│   │   ├── UnionFind.ts                # Union-Find for connectivity
+│   │   └── generation.ts               # Dungeon generation functions
+│   ├── game/
+│   │   ├── GameEngine.ts               # Core game loop logic
+│   │   └── DungeonManager.ts           # Dungeon state management
+│   └── rendering/
+│       ├── GameRenderer.ts             # Main canvas rendering
+│       └── MinimapRenderer.ts          # Minimap rendering
+├── data/
+│   └── game.db                         # SQLite database
+└── public/
+    └── Assets/                         # Game assets (sprites, tilesets)
+```
+
+### Component Hierarchy
+
+```
+GameCanvas (Main Orchestrator)
+├── LoginModal (conditional - shown on app start)
+├── CharacterPanel (persistent top-left UI)
+├── CombatModal (conditional - shown during combat)
+├── SkillDashboard (conditional - toggled with 'D' key)
+├── <canvas> (main game rendering)
+└── <canvas> (minimap overlay)
+```
+
+### Hook Architecture
+
+The application uses a sophisticated hook-based state management system:
+
+**useAuth** (hooks/useAuth.ts)
+- Manages user authentication state
+- LocalStorage persistence for userId/username
+- API calls for login/logout
+
+**useScoring** (hooks/useScoring.ts)
+- Tracks session-based ELO scores per subject
+- Compares starting ELO vs current ELO
+- Provides visual indicators (green/red glows in CharacterPanel)
+- Updates after each answer
+
+**useGameState** (hooks/useGameState.ts)
+- Manages game loop using requestAnimationFrame
+- Orchestrates DungeonManager and GameEngine
+- Handles tileset loading
+- Controls player movement and enemy updates
+- Triggers rendering via GameRenderer and MinimapRenderer
+
+**useCombat** (hooks/useCombat.ts)
+- Combat state machine (idle, active, showing feedback)
+- Question selection using ELO algorithm
+- Timer management (10-second countdown)
+- Answer validation and damage calculation
+- Answer logging to database
+- Session score updates
+
+## Database Schema (SQLite)
+
+### Tables
+
+**users**
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_login DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+**questions**
+```sql
+CREATE TABLE questions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject_key TEXT NOT NULL,              -- e.g., 'mathe', 'chemie', 'physik'
+  subject_name TEXT NOT NULL,             -- e.g., 'Mathematik', 'Chemie', 'Physik'
+  question TEXT NOT NULL,
+  answers TEXT NOT NULL,                  -- JSON array: ["A", "B", "C", "D"]
+  correct_index INTEGER NOT NULL,         -- 0-3
+  difficulty INTEGER DEFAULT 5,           -- Initial difficulty (unused)
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+**answer_log**
+```sql
+CREATE TABLE answer_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  answered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  question_id INTEGER NOT NULL,
+  selected_answer_index INTEGER NOT NULL,  -- 0-3
+  is_correct BOOLEAN NOT NULL,
+  answer_time_ms INTEGER,                  -- Time taken to answer
+  timeout_occurred BOOLEAN DEFAULT 0,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (question_id) REFERENCES questions(id)
+)
+```
+
+### Key Database Functions (lib/db.ts)
+
+**Core Operations:**
+- `getDatabase()`: Singleton database connection
+- `initializeDatabase()`: Creates tables and seeds 30 questions (10 per subject)
+- `loginUser(username)`: Login or create user, updates last_login
+- `getAllQuestions()`: Returns all questions grouped by subject
+- `getQuestionsWithEloBySubject(subject, userId)`: Returns questions with calculated ELO
+- `getSessionEloScores(userId)`: Returns average ELO per subject
+- `logAnswer(entry)`: Records answer with timing and correctness
+
+**ELO Calculation:**
+```typescript
+function calculateElo(correctCount: number, totalCount: number): number | null {
+  if (totalCount === 0) return null;
+  return Math.round(10.0 * correctCount / totalCount);
+}
+```
+- Returns 0-10 scale based on percentage correct
+- `null` if question never answered
+
+**Database Seeding:**
+- Automatically seeds 30 questions on first run
+- 10 questions each: Mathematik, Chemie, Physik
+- Questions sourced from `lib/questions.ts`
+
+## API Routes
+
+### GET /api/questions
+Returns all questions grouped by subject:
+```typescript
+Response: {
+  [subject_key]: {
+    subject: string,
+    questions: Question[]
+  }
+}
+```
+
+### GET /api/questions-with-elo?subject=X&userId=Y
+Returns questions with per-user ELO for a specific subject:
+```typescript
+Response: QuestionWithElo[] = {
+  id: number,
+  question: string,
+  answers: string[],
+  correct: number,
+  elo: number | null,           // 0-10 or null if never answered
+  correctCount: number,
+  wrongCount: number,
+  timeoutCount: number
+}
+```
+
+### POST /api/answers
+Logs an answer:
+```typescript
+Body: {
+  user_id: number,
+  question_id: number,
+  selected_answer_index: number,
+  is_correct: boolean,
+  answer_time_ms: number,
+  timeout_occurred: boolean
+}
+Response: { success: true }
+```
+
+### GET /api/stats?userId=X
+Returns comprehensive statistics (uses progressive ELO calculation):
+```typescript
+Response: {
+  [subject_key]: {
+    subject_name: string,
+    average_elo: number,
+    questions: [{
+      id: number,
+      question: string,
+      correct: number,
+      wrong: number,
+      timeout: number,
+      elo: number
+    }]
+  }
+}
+```
+
+**Note**: This endpoint uses a different ELO calculation (progressive incremental updates) compared to `/api/questions-with-elo` (simple percentage).
+
+### GET /api/subjects
+Returns array of subject keys:
+```typescript
+Response: string[]  // e.g., ['mathe', 'chemie', 'physik']
+```
+
+### GET /api/session-elo?userId=X
+Returns session starting ELO per subject:
+```typescript
+Response: SubjectEloScore[] = {
+  subjectKey: string,
+  subjectName: string,
+  averageElo: number
+}
+```
+
+### POST /api/auth/login
+Login or register user:
+```typescript
+Body: { username: string }
+Response: { id: number, username: string }
+```
+- Creates new user if username doesn't exist
+- Updates last_login timestamp
+- No password required (simple educational prototype)
+
+### POST /api/auth/logout
+Clears session (currently no-op on server, client-side only)
+
+## Core Systems
+
+### 1. Dungeon Generation (BSP-based)
+
+**Implementation**: lib/dungeon/
+
+**Process:**
+1. Create empty grid (100×100)
+2. BSP: Recursively split space into rooms using BSPNode class
+3. Fill rooms with floor tiles
+4. Connect rooms using Union-Find algorithm (ensures full connectivity)
+5. Add walls around floor tiles
+6. Assign room types: 70% empty, 20% treasure, 10% combat
+
+**Key Files:**
+- `BSPNode.ts`: Recursive binary space partitioning tree
+- `UnionFind.ts`: Union-Find data structure for connectivity
+- `generation.ts`: Main generation functions
+
+**Room Types:**
+- **Empty**: Default floor tiles (random variants)
+- **Treasure**: Golden floor tile (18, 11)
+- **Combat**: Dark floor tile (7, 12)
+
+**Constants:**
+- `DUNGEON_WIDTH/HEIGHT`: 100×100 grid
+- `MIN_ROOM_SIZE`: 4 tiles
+- `MAX_ROOM_SIZE`: 8 tiles
+
+### 2. Sprite System
+
+**Implementation**: lib/SpriteSheetLoader.ts
+
+**Features:**
 - 14 animation types: spellcast, thrust, walk, slash, shoot, hurt, climb, idle, jump, sit, emote, run, watering, combat
 - 4-directional support (up, down, left, right) for most animations
 - Frame dimensions: 64×64 pixels
-- Variable animation speeds defined in `ANIM_SPEEDS` (dungeon.html:183-189)
+- Variable animation speeds defined in constants.ts
 
-**3. Player System**
-- Player sprite: `Assets/player.png` with embedded configuration
-- Movement: 6 tiles/second using WASD or arrow keys (dungeon.html:738-813)
-- Collision detection: Reduced hitbox (0.5 of tile size) checks all 4 corners (dungeon.html:815-848)
+**Spritesheet Configuration:**
+- Embedded in constants.ts to avoid CORS issues
+- Both player and goblin use same structure
+- Configuration includes frame counts and row layout per animation
+
+### 3. Player System
+
+**Implementation**: useGameState hook, GameEngine.ts
+
+**Features:**
+- Movement: 6 tiles/second using WASD or arrow keys
+- Collision detection: Reduced hitbox (0.5 of tile size) checks all 4 corners
 - Animation states: idle, run (mapped based on movement)
 - HP system: 100 max HP, takes 15 damage per wrong answer
 
-**4. Enemy AI System**
-- `Enemy` class with state machine (dungeon.html:362-597)
-- Three AI states (dungeon.html:330-335):
-  - `IDLE`: Waiting at position (2 second timer)
-  - `WANDERING`: Moving to random waypoint within room
-  - `FOLLOWING`: Chasing player within aggro radius
-- Enemy stats: 30 HP, 3 tiles/second movement speed
-- Aggro system: 3-tile aggro radius, 6-tile deaggro radius (dungeon.html:319-320)
-- Death animation: Hurt animation stops on last frame (dungeon.html:548-553)
+**Player Object:**
+```typescript
+{
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  direction: Direction,      // 'up' | 'down' | 'left' | 'right'
+  isMoving: boolean,
+  hp: number,
+  maxHp: number
+}
+```
+
+### 4. Enemy AI System
+
+**Implementation**: lib/Enemy.ts
+
+**Three AI States:**
+- `IDLE`: Waiting at position (2 second timer)
+- `WANDERING`: Moving to random waypoint within room
+- `FOLLOWING`: Chasing player within aggro radius (3 tiles)
+
+**State Transitions:**
+- Aggro: Distance ≤ 3 tiles → FOLLOWING
+- Deaggro: Distance > 6 tiles → IDLE
+- Waypoint reached → IDLE
+- Combat trigger: Distance < 0.5 tiles → startCombat()
+
+**Enemy Properties:**
+```typescript
+{
+  x: number,
+  y: number,
+  room: Room,
+  hp: number,
+  maxHp: number,
+  state: AIStateType,          // 'idle' | 'wandering' | 'following'
+  level: number,               // 1-10 (determines question difficulty)
+  subject: string,             // 'mathe' | 'chemie' | 'physik'
+  waypoint: {x: number, y: number} | null
+}
+```
+
+**Enemy Stats:**
+- HP: 30 (GOBLIN_MAX_HP)
+- Speed: 3 tiles/second
+- Aggro radius: 3 tiles
+- Deaggro radius: 6 tiles
 - One goblin spawns per room (except player's starting room)
 
-**5. Combat System**
-- Turn-based quiz combat triggered when enemy reaches player (dungeon.html:1602-1759)
-- Questions loaded from `database/questions.js` with three subjects: Mathematik, Chemie, Physik
-- 10-second timer per question with countdown display (dungeon.html:326)
-- Damage model:
-  - Correct answer: 10 damage to enemy
-  - Wrong/timeout: 15 damage to player, shows correct answer
-- Combat UI: Modal overlay with HP bars, timer, question, and shuffled answers
-- Victory condition: Enemy HP reaches 0
-- Defeat condition: Player HP reaches 0, triggers game restart
+**Visual Indicators:**
+- Green goblin: Level 1-3 (easy)
+- Yellow goblin: Level 4-7 (medium)
+- Red goblin: Level 8-10 (hard)
 
-**6. Rendering System**
-- Canvas-based rendering with camera system centered on player (dungeon.html:1320-1438)
-- Tileset: `Assets/Castle-Dungeon2_Tiles/Tileset.png` (64×64 tiles)
-- Weighted random tile variants for visual variety (dungeon.html:627-664)
-  - Wall variants: 5 options with weights 20/15/15/15/1
-  - Floor variants: 5 options with weights 200/50/30/2/1
-- Room-specific floor tiles:
-  - Treasure rooms: Tile (18, 11) - golden floor
-  - Combat rooms: Tile (7, 12) - darker floor
-  - Empty rooms: Random variants
-- Minimap: 200×200 pixel overlay showing explored areas (dungeon.html:1440-1535)
-  - Color coding: Gold (treasure), Red (combat), Gray (empty), Green (doors), Cyan (player)
+### 5. Combat System
 
-**7. Fog of War System**
+**Implementation**: hooks/useCombat.ts, components/CombatModal.tsx
+
+**Combat Flow:**
+1. Enemy reaches player → `startCombat(enemy)`
+2. `askQuestion()`:
+   - Fetch questions with ELO via `/api/questions-with-elo`
+   - Select question using ELO algorithm (QuestionSelector.ts)
+   - Shuffle answers to prevent memorization
+   - Start 10-second timer
+3. `answerQuestion(index)`:
+   - Log answer to database via `/api/answers`
+   - Update session scores via useScoring hook
+   - Apply damage (10 to enemy or 15 to player)
+   - Show feedback (1.5 seconds)
+   - Check win/loss conditions
+   - Next question or end combat
+4. `endCombat()`:
+   - Clear timers
+   - Reset state
+   - Trigger game restart if player died
+
+**Damage Model:**
+- Correct answer: 10 damage to enemy
+- Wrong answer or timeout: 15 damage to player
+- Correct answer is always shown after wrong/timeout
+
+**Combat UI:**
+- Modal overlay with HP bars
+- Timer countdown (10 seconds)
+- Question text
+- Shuffled answer buttons
+- Difficulty indicator (enemy level)
+- Subject indicator
+
+### 6. ELO System
+
+**Two ELO Calculation Methods:**
+
+**Method 1: Simple Percentage** (used in lib/db.ts and `/api/questions-with-elo`)
+```typescript
+ELO = Math.round(10.0 * correctCount / totalCount)
+```
+- Returns 0-10 scale
+- Based on lifetime correct percentage
+- Used for question selection
+
+**Method 2: Progressive Updates** (used in `/api/stats`)
+```typescript
+// Starting at 5, incrementally updated per answer:
+// Correct: elo = ceil((elo + (10 - elo) / 3) * 10) / 10
+// Wrong/Timeout: elo = floor((elo - (elo - 1) / 4) * 10) / 10
+```
+- More granular tracking with decimal precision
+- Used for statistics dashboard
+
+**Question Selection Algorithm** (lib/combat/QuestionSelector.ts)
+
+**Difficulty Matching:**
+- Enemy Level (1-10) → Maximum Question ELO: `11 - enemyLevel`
+- Example: Level 5 enemy → questions with ELO ≤ 6 (easier questions)
+- Example: Level 9 enemy → questions with ELO ≤ 2 (only hardest questions)
+
+**Selection Logic:**
+1. Filter out already-asked questions in this combat
+2. Filter by difficulty threshold (ELO ≤ max for enemy level)
+3. If suitable questions exist: pick hardest matching question (lowest ELO)
+4. Fallback 1: Unanswered questions (ELO = null)
+5. Fallback 2: Next hardest available question (ignore difficulty threshold)
+
+### 7. Session Score Tracking
+
+**Implementation**: hooks/useScoring.ts, components/CharacterPanel.tsx
+
+**CharacterPanel Display:**
+- 10 circles per subject (representing ELO 1-10)
+- Filled circles = current ELO level
+- Green glow = gained points this session
+- Red glow = lost points this session
+- Gold badge = number of questions answered this session
+
+**Data Flow:**
+1. On login: `loadSessionElos()` → saves starting ELO per subject
+2. After each answer: `updateSessionScores()` → fetches new ELO
+3. Comparison: `startElo` vs `currentElo` → visual indicators
+
+**State Structure:**
+```typescript
+{
+  startElo: { [subjectKey]: number },      // ELO at session start
+  currentElo: { [subjectKey]: number },    // Current ELO
+  questionsAnswered: { [subjectKey]: number }
+}
+```
+
+### 8. Rendering System
+
+**Implementation**: lib/rendering/GameRenderer.ts, lib/rendering/MinimapRenderer.ts
+
+**GameRenderer:**
+- Canvas-based rendering with camera centered on player
+- Tile-by-tile rendering with weighted random variants
+- Fog of War: Only visible rooms rendered
+- Door rendering: Horizontal/vertical based on neighbors
+- Enemy rendering: Status bar with level/subject/HP
+- Player rendering: Directional sprite animation
+
+**Tile Variants:**
+- Wall variants: 5 options with weights 20/15/15/15/1
+- Floor variants: 5 options with weights 200/50/30/2/1
+- Pre-selected on dungeon generation for consistency
+
+**MinimapRenderer:**
+- 200×200 pixel overlay (top-right)
+- Color coding:
+  - Gold: Treasure rooms
+  - Red: Combat rooms
+  - Gray: Empty rooms
+  - Green: Doors
+  - Cyan: Player position
+- Respects fog of war
+
+### 9. Fog of War System
+
+**Implementation**: DungeonManager, GameRenderer
+
+**Mechanism:**
 - Each room has a `visible` boolean property
 - `roomMap` 2D array maps each tile to its room index
   - `-1`: Walls
   - `-2`: Doors
   - `>= 0`: Room ID
-- Player position updates visibility (dungeon.html:850-861)
-- Walls/doors visible if any adjacent room is visible (dungeon.html:1373-1390)
+- Player position updates visibility (current room becomes visible)
+- Walls/doors visible if any adjacent room is visible
 - Minimap respects fog of war
 
-**8. Data Structures**
-- `dungeon`: 2D array of tile types (EMPTY=0, FLOOR=1, WALL=2, DOOR=3, CORNER=4)
-- `rooms`: Array of room objects with properties:
-  ```javascript
-  {
-    id: number,
-    x: number, y: number,
-    width: number, height: number,
-    visible: boolean,
-    neighbors: number[],
-    type: 'empty' | 'treasure' | 'combat'
-  }
-  ```
-- `roomMap`: 2D array mapping grid positions to room IDs
-- `tileVariants`: 2D array of pre-selected tile variants (floor/wall) for consistent rendering
-- `enemies`: Array of Enemy instances
-- `player`: Object with x, y, width, height, direction, isMoving, hp, maxHp
+## TypeScript Types (lib/constants.ts)
 
-## File Structure
+### Core Types
 
-```
-.
-├── dungeon.html              # Main application file (all game code)
-├── CLAUDE.md                 # This file
-├── database/
-│   ├── questions.js          # Question database (embedded to avoid CORS)
-│   ├── mathe.json            # (unused - questions embedded in JS)
-│   ├── chemie.json           # (unused - questions embedded in JS)
-│   └── physik.json           # (unused - questions embedded in JS)
-└── Assets/
-    ├── player.png            # Player spritesheet (64×64 frames)
-    ├── player.json           # Player animation configuration
-    ├── goblin.png            # Goblin spritesheet (64×64 frames)
-    └── Castle-Dungeon2_Tiles/
-        ├── Tileset.png       # 64×64 tile atlas
-        ├── Tileset_Matrix.png # Reference image showing tile coordinates
-        └── Individual_Tiles/ # Individual tile exports (not used in-game)
-```
+```typescript
+export interface Room {
+  id: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  visible: boolean;
+  neighbors: number[];
+  type: 'empty' | 'treasure' | 'combat';
+}
 
-## Development Workflow
+export interface Player {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  direction: Direction;
+  isMoving: boolean;
+  hp: number;
+  maxHp: number;
+}
 
-### Running the Game
-```bash
-# Simply open the HTML file in a browser (no build process)
-start dungeon.html  # Windows
-open dungeon.html   # macOS
-xdg-open dungeon.html  # Linux
+export interface TileCoord {
+  x: number;
+  y: number;
+}
+
+export interface TileVariant {
+  floor: TileCoord;
+  wall: TileCoord;
+}
+
+export type Direction = 'up' | 'down' | 'left' | 'right';
+export type AnimationType = 'idle' | 'run' | 'walk' | 'hurt' | 'spellcast' | 'thrust' | 'slash' | 'shoot' | 'climb' | 'jump' | 'sit' | 'emote' | 'watering' | 'combat';
+export type TileType = 0 | 1 | 2 | 3 | 4; // EMPTY, FLOOR, WALL, DOOR, CORNER
+export type AIStateType = 'idle' | 'wandering' | 'following';
 ```
 
-Or use a local server to avoid CORS issues:
-```bash
-python -m http.server 8000
-# Then navigate to http://localhost:8000/dungeon.html
-```
+### Question Types
 
-### Controls
-- **WASD** or **Arrow Keys**: Move player
-- **Click doors**: Reveal adjacent rooms (currently not required - rooms reveal on entry)
-- **Generate New Dungeon** button: Restart with fresh dungeon
+```typescript
+export interface Question {
+  id: number;
+  question: string;
+  answers: string[];
+  correct: number;
+}
 
-### Key Configuration Constants
+export interface QuestionWithElo extends Question {
+  elo: number | null;
+  correctCount: number;
+  wrongCount: number;
+  timeoutCount: number;
+}
 
-Located at top of `dungeon.html`:
-- `DUNGEON_WIDTH/HEIGHT`: Grid size (100×100)
-- `MIN_ROOM_SIZE/MAX_ROOM_SIZE`: BSP constraints (4-8 tiles)
-- `PLAYER_SPEED_TILES`: 6 tiles/second
-- `ENEMY_SPEED_TILES`: 3 tiles/second
-- `ENEMY_AGGRO_RADIUS`: 3 tiles
-- `ENEMY_DEAGGRO_RADIUS`: 6 tiles
-- `ENEMY_IDLE_WAIT_TIME`: 2 seconds
-- `PLAYER_MAX_HP`: 100
-- `GOBLIN_MAX_HP`: 30
-- `COMBAT_TIME_LIMIT`: 10 seconds per question
-- `DAMAGE_CORRECT`: 10 damage to enemy
-- `DAMAGE_WRONG`: 15 damage to player
-
-### Spritesheet Format
-
-Both player and goblin use the same spritesheet structure:
-- **Frame size**: 64×64 pixels
-- **Layout**: Multiple rows, each row contains one animation direction
-- **Animations** (defined in `SPRITESHEET_CONFIGS`):
-  - 4-directional (rows: up, left, down, right): spellcast, thrust, walk, slash, shoot, idle, jump, sit, emote, run, watering, combat
-  - Single direction: hurt, climb
-
-Configuration embedded in JavaScript to avoid CORS issues when loading JSON files locally.
-
-## Important Implementation Details
-
-### Tile Coordinate System
-- Tiles referenced by `{x, y}` coordinates in tileset grid
-- Example: `{x: 0, y: 1}` = column 0, row 1
-- `getTileCoords()` maps tile types to tileset coordinates (dungeon.html:1264-1318)
-- `Tileset_Matrix.png` shows grid overlay for reference
-
-### Collision System
-- Uses reduced player size (0.5 of tile size) for forgiving collision
-- Checks all 4 corners of bounding box against dungeon grid
-- Walls and empty tiles block movement
-- Floors and doors are passable
-- Doors convert to floors on player contact (dungeon.html:793-800)
-
-### Union-Find for Connectivity
-- Ensures all rooms are reachable via minimal spanning tree
-- Scans for valid door positions where rooms are adjacent (dungeon.html:1164-1205)
-- Shuffles connections for randomness
-- Adds connections until all rooms connected
-- 2% chance for extra doors to create loops (dungeon.html:1228-1242)
-
-### Question Database Format
-```javascript
-{
-  [subject_key]: {
-    subject: "Display Name",
-    questions: [
-      {
-        question: "Question text?",
-        answers: ["Option 1", "Option 2", "Option 3", "Option 4"],
-        correct: 0  // Index of correct answer
-      }
-    ]
-  }
+export interface AnswerLogEntry {
+  user_id: number;
+  question_id: number;
+  selected_answer_index: number;
+  is_correct: boolean;
+  answer_time_ms: number;
+  timeout_occurred: boolean;
 }
 ```
 
-Answers are shuffled during combat to prevent memorization (dungeon.html:1640-1653).
+## Configuration Constants (lib/constants.ts)
 
-### Combat Flow
-1. Enemy reaches player → `startCombat()` (dungeon.html:1608)
-2. Random subject selected
-3. Random question from subject pool
-4. Answers shuffled, correct index tracked
-5. 10-second timer starts
-6. Player selects answer or times out
-7. Feedback shown (1.5 seconds)
-8. Damage applied, HP updated
-9. Check win/loss conditions
-10. If combat continues, next question (loop to step 3)
-11. Combat ends when enemy dies or player dies
+### Dungeon
+- `DUNGEON_WIDTH`: 100
+- `DUNGEON_HEIGHT`: 100
+- `MIN_ROOM_SIZE`: 4
+- `MAX_ROOM_SIZE`: 8
 
-## Common Modifications
+### Player
+- `PLAYER_SPEED_TILES`: 6 (tiles per second)
+- `PLAYER_SIZE`: 0.5 (hitbox size multiplier)
+- `PLAYER_MAX_HP`: 100
 
-### Adjusting Difficulty
-- Enemy HP: `GOBLIN_MAX_HP` (dungeon.html:325)
-- Combat time: `COMBAT_TIME_LIMIT` (dungeon.html:326)
-- Damage values: `DAMAGE_CORRECT`, `DAMAGE_WRONG` (dungeon.html:327-328)
-- Enemy speed: `ENEMY_SPEED_TILES` (dungeon.html:318)
-- Aggro radius: `ENEMY_AGGRO_RADIUS` (dungeon.html:319)
+### Enemy
+- `ENEMY_SPEED_TILES`: 3 (tiles per second)
+- `ENEMY_AGGRO_RADIUS`: 3 (tiles)
+- `ENEMY_DEAGGRO_RADIUS`: 6 (tiles)
+- `ENEMY_IDLE_WAIT_TIME`: 2 (seconds)
+- `GOBLIN_MAX_HP`: 30
 
-### Adding Questions
-Edit `database/questions.js`:
-```javascript
-QUESTION_DATABASE.newSubject = {
-  subject: "New Subject Name",
-  questions: [
-    { question: "...", answers: ["A", "B", "C", "D"], correct: 0 }
-  ]
-};
+### Combat
+- `COMBAT_TIME_LIMIT`: 10 (seconds per question)
+- `DAMAGE_CORRECT`: 10 (damage to enemy)
+- `DAMAGE_WRONG`: 15 (damage to player)
+
+### Rendering
+- `TILE_SIZE`: 64 (pixels)
+- `MINIMAP_WIDTH`: 200 (pixels)
+- `MINIMAP_HEIGHT`: 200 (pixels)
+
+## Development Workflow
+
+### Running the Next.js App
+
+```bash
+cd next-app
+npm install
+npm run dev
+# Navigate to http://localhost:3000
 ```
 
-### Changing Dungeon Size
-- Modify `DUNGEON_WIDTH` and `DUNGEON_HEIGHT` (dungeon.html:98-99)
-- Adjust `MIN_ROOM_SIZE` and `MAX_ROOM_SIZE` for different room distribution (dungeon.html:100-101)
+### Building for Production
 
-### Modifying Room Types
-Room type distribution set in `BSPNode.fillRooms()` (dungeon.html:1061-1069):
-```javascript
-const typeRoll = Math.random() * 10;
-if (typeRoll < 2) roomType = 'treasure';        // 20%
-else if (typeRoll < 3) roomType = 'combat';     // 10%
-else roomType = 'empty';                        // 70%
+```bash
+cd next-app
+npm run build
+npm start
 ```
 
-### Changing Tile Appearance
-- **Floor tiles**: Modify `FLOOR_VARIANTS` array (dungeon.html:635-641)
-- **Wall tiles**: Modify `WALL_VARIANTS` array (dungeon.html:627-633)
-- **Room-specific tiles**: Edit `getTileCoords()` for treasure/combat rooms (dungeon.html:1270-1280)
-- Use `Tileset_Matrix.png` to find tile coordinates
+### Database Management
 
-## Next.js Migration Plan
+**Location**: `next-app/data/game.db`
 
-**WICHTIG: Dies ist Wegwerf-Code (Spike)**. Die Next.js-App wird von Grund auf neu gebaut, nicht refactored.
-
-### Goals
-1. **SQLite Database**: Fragen dynamisch laden statt embedded JS
-2. **Progress Tracking**: Punkte und Statistiken speichern
-3. **Simple UI**: Basis-Interface ohne komplexe Features
-
-### Simple Architecture
-
-```
-next-app/
-├── app/
-│   ├── page.tsx            # Landing page
-│   ├── game/
-│   │   └── page.tsx        # Game (Client Component mit Canvas)
-│   └── api/
-│       ├── questions/route.ts
-│       └── progress/route.ts
-├── components/
-│   └── GameCanvas.tsx      # Komplettes Spiel als ein Component
-├── lib/
-│   ├── game.ts             # Gesamter Game-Code aus dungeon.html
-│   └── db.ts               # SQLite mit better-sqlite3
-├── data/
-│   └── game.db             # SQLite Datenbank
-└── public/
-    └── assets/             # Einfach Assets/ Ordner kopieren
+**Reset Database:**
+```bash
+rm next-app/data/game.db
+# Database will be recreated on next app start
 ```
 
-### Migration Steps
+**Seed Questions:**
+- Automatically seeded on first run
+- Edit `lib/questions.ts` to modify seed data
+- Questions: 30 total (10 per subject)
 
-1. **Setup**
-   ```bash
-   npx create-next-app@latest dungeon-game
-   npm install better-sqlite3
-   ```
+### Controls
 
-2. **SQLite Setup**
-   ```typescript
-   // lib/db.ts
-   import Database from 'better-sqlite3';
-   const db = new Database('data/game.db');
+**In-Game:**
+- **WASD** or **Arrow Keys**: Move player
+- **D**: Toggle statistics dashboard
+- **ESC**: Close modals
 
-   // Tabellen: questions, progress
-   // Keine User-Auth, nur lokales Tracking
-   ```
+**Login Screen:**
+- Enter username (no password required)
+- Username is case-insensitive
 
-3. **Game Component**
-   - Copy kompletten `<script>` aus dungeon.html nach `lib/game.ts`
-   - Wrapper als React Component
-   - Canvas Rendering bleibt identisch
+## Data Flow Summary
 
-4. **API Routes**
-   - `GET /api/questions`: Alle Fragen laden
-   - `POST /api/progress`: Score speichern
+```
+User Login
+  ↓
+localStorage (userId/username) + Database (users table)
+  ↓
+Load Session Starting ELO (useScoring)
+  ↓
+Load Questions (API)
+  ↓
+Initialize Game Loop (useGameState)
+  ↓
+Generate Dungeon (BSP)
+  ↓
+Spawn Player + Enemies
+  ↓
+Game Loop (requestAnimationFrame):
+  - Update Player (movement, collision, fog of war)
+  - Update Enemies (AI, pathfinding, combat trigger)
+  - Render (dungeon, sprites, minimap)
+  ↓
+Enemy Reaches Player
+  ↓
+Start Combat (useCombat):
+  - Fetch Questions with ELO (API)
+  - Select Question (ELO algorithm)
+  - Shuffle Answers
+  - Show Combat Modal
+  - Start Timer
+  ↓
+Answer Question
+  ↓
+Log Answer (API)
+  ↓
+Update Session ELO (useScoring)
+  ↓
+Apply Damage
+  ↓
+Show Feedback (1.5 seconds)
+  ↓
+Next Question or End Combat
+  ↓
+Continue Game or Restart (if player died)
+```
 
-Das war's. Keep it simple!
+## Important Implementation Details
+
+### Collision System
+- Reduced player size (0.5 of tile size) for forgiving collision
+- Checks all 4 corners of bounding box against dungeon grid
+- Walls (type 2) and empty tiles (type 0) block movement
+- Floors (type 1) and doors (type 3) are passable
+- Doors convert to floors on player contact
+
+### Union-Find for Connectivity
+- Ensures all rooms are reachable via minimal spanning tree
+- Scans for valid door positions where rooms are adjacent
+- Shuffles connections for randomness
+- Adds connections until all rooms connected
+- 2% chance for extra doors to create loops
+
+### Answer Shuffling
+- Answers are shuffled during combat to prevent memorization
+- Correct index is tracked separately
+- Original question data unchanged in database
+
+### Database Migration
+- Code includes migration logic for old schema (separate answer columns) to new schema (JSON array)
+- Automatically runs on database initialization
+
+### Asset Paths
+- Assets must be in `public/Assets/`
+- Referenced as `/Assets/...` in code
+- Player sprite: `/Assets/player.png`
+- Goblin sprite: `/Assets/goblin.png`
+- Tileset: `/Assets/Castle-Dungeon2_Tiles/Tileset.png`
+
+## Known Issues / Technical Debt
+
+### ELO Calculation Inconsistency
+Two different ELO calculation methods exist:
+1. **Simple Percentage** (question selection): `ELO = 10 * correct / total`
+2. **Progressive Updates** (statistics): Incremental updates per answer
+
+**Recommendation**: Standardize on one method or clearly document use cases.
+
+### No Password Authentication
+- Authentication is intentionally simple (username only)
+- Suitable for educational/prototype purposes
+- **Not production-ready** for multi-user environments
+
+### Client-Side Game State
+- Game state (dungeon, enemies, player) is entirely client-side
+- Database only tracks questions and answers
+- No server-side validation of combat results
+
+### No Error Handling in API Routes
+- Minimal error handling in API routes
+- Database errors may crash the app
+- **Recommendation**: Add try-catch blocks and proper error responses
+
+## Differences from Original Prototype
+
+### Added Features
+- SQLite database with persistent storage
+- User management system
+- ELO-based difficulty tracking
+- Dynamic question selection algorithm
+- Statistics dashboard
+- Session progress visualization
+- Enemy level indicators
+- Subject-specific enemies
+
+### Preserved Features
+- BSP dungeon generation (identical algorithm)
+- Enemy AI (3-state machine)
+- Combat system (quiz-based, timed)
+- Sprite animation system
+- Fog of War
+- Minimap
+- Room types
+- HP system
+- Collision detection
+
+### Architecture Changes
+- **Single HTML file → Modular Next.js app**
+- **Embedded questions → SQLite database**
+- **Inline JavaScript → TypeScript with strict typing**
+- **Global variables → React hooks and refs**
+- **Monolithic code → Separated concerns** (hooks, components, lib)
+
+## Future Enhancements (Planned)
+
+1. **Multiplayer Support**
+   - WebSocket-based real-time multiplayer
+   - Shared dungeons
+   - PvP combat
+
+2. **Extended Content**
+   - More subjects beyond Math/Chemistry/Physics
+   - Item system (weapons, armor, potions)
+   - Character classes
+   - Boss enemies
+
+3. **Analytics**
+   - Learning curves per subject
+   - Time-of-day performance tracking
+   - Difficulty progression recommendations
+
+4. **Authentication**
+   - Password-based authentication
+   - OAuth providers (Google, GitHub)
+   - User profiles
+
+5. **Performance Optimization**
+   - Canvas rendering optimization
+   - Database indexing
+   - API response caching
 
 ## Technical Constraints
 
 ### Current Implementation
-- No external dependencies - pure vanilla JavaScript
-- All code in single HTML file for portability
-- Assets must be in `Assets/` directory
-- Canvas rendering only (no WebGL)
-- Tileset tiles must be 64×64 pixels
-- Spritesheet frames must be 64×64 pixels
-- Question database embedded to avoid CORS issues
+- TypeScript with strict typing
+- SQLite with better-sqlite3 (synchronous API)
+- Canvas rendering (no WebGL)
+- Tileset tiles: 64×64 pixels
+- Spritesheet frames: 64×64 pixels
+- No build-time asset optimization
 
-### For Next.js Migration
-- TypeScript (einfache Types, kein Over-Engineering)
-- SQLite mit better-sqlite3
-- Canvas bleibt vanilla (kein Phaser/PixiJS)
-- Minimale Dependencies
+### Dependencies
+- Next.js 15+
+- React 18+
+- better-sqlite3
+- Minimal external dependencies (by design)
 
+### Browser Compatibility
+- Modern browsers (Chrome, Firefox, Safari, Edge)
+- Requires Canvas API support
+- LocalStorage for session persistence
+
+---
+
+**Last Updated**: 2025-11-20
+**Author**: Dungeons & Diplomas Team
+**Status**: Active Development (Next.js migration complete)

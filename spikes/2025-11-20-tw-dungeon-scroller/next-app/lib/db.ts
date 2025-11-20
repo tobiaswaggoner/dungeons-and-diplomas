@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
+import { calculateEloOrNull, type AnswerRecord } from './scoring/EloCalculator';
 
 // Database path
 const DB_PATH = path.join(process.cwd(), 'data', 'game.db');
@@ -114,53 +116,19 @@ function migrateQuestionsIfNeeded(database: Database.Database) {
 }
 
 function seedQuestions(database: Database.Database) {
+  // Load questions from JSON file
+  const questionsPath = path.join(process.cwd(), 'lib', 'data', 'seed-questions.json');
+  const questionsJson = fs.readFileSync(questionsPath, 'utf-8');
+  const questions = JSON.parse(questionsJson);
+
   // Prepare insert statement
   const insert = database.prepare(`
     INSERT INTO questions (subject_key, subject_name, question, answers, correct_index, difficulty)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
 
-  // Seed data from original questions
-  const questions = [
-    // Mathematik
-    { subjectKey: 'mathe', subjectName: 'Mathematik', question: 'Was ist die Lösung der Gleichung: 3x + 7 = 22?', answers: ['x = 5', 'x = 7', 'x = 3', 'x = 15'], correct: 0 },
-    { subjectKey: 'mathe', subjectName: 'Mathematik', question: 'Wie viel ist 15% von 80?', answers: ['12', '10', '15', '18'], correct: 0 },
-    { subjectKey: 'mathe', subjectName: 'Mathematik', question: 'Was ist die Fläche eines Rechtecks mit den Seiten 8cm und 5cm?', answers: ['40 cm²', '26 cm²', '13 cm²', '80 cm²'], correct: 0 },
-    { subjectKey: 'mathe', subjectName: 'Mathematik', question: 'Welche Zahl ergibt 2³ × 2²?', answers: ['32', '16', '64', '8'], correct: 0 },
-    { subjectKey: 'mathe', subjectName: 'Mathematik', question: 'Was ist der Umfang eines Kreises mit Radius 7cm? (π ≈ 3,14)', answers: ['43,96 cm', '153,86 cm', '21,98 cm', '49 cm'], correct: 0 },
-    { subjectKey: 'mathe', subjectName: 'Mathematik', question: 'Wie lautet die Primfaktorzerlegung von 36?', answers: ['2² × 3²', '2 × 3³', '2³ × 3', '6²'], correct: 0 },
-    { subjectKey: 'mathe', subjectName: 'Mathematik', question: 'Was ist die Steigung einer Geraden durch die Punkte (2,3) und (6,11)?', answers: ['2', '4', '0,5', '8'], correct: 0 },
-    { subjectKey: 'mathe', subjectName: 'Mathematik', question: 'Welchen Wert hat x in der Gleichung: x² = 64?', answers: ['±8', '8', '32', '4'], correct: 0 },
-    { subjectKey: 'mathe', subjectName: 'Mathematik', question: 'Was ist der Median der Zahlenreihe: 3, 7, 9, 15, 21?', answers: ['9', '11', '7', '15'], correct: 0 },
-    { subjectKey: 'mathe', subjectName: 'Mathematik', question: 'Wie viele Diagonalen hat ein Sechseck?', answers: ['9', '6', '12', '15'], correct: 0 },
-
-    // Chemie
-    { subjectKey: 'chemie', subjectName: 'Chemie', question: 'Was ist die chemische Formel für Wasser?', answers: ['H₂O', 'CO₂', 'H₂O₂', 'HO'], correct: 0 },
-    { subjectKey: 'chemie', subjectName: 'Chemie', question: 'Wie viele Protonen hat ein Kohlenstoffatom?', answers: ['6', '12', '8', '4'], correct: 0 },
-    { subjectKey: 'chemie', subjectName: 'Chemie', question: 'Was ist der pH-Wert einer neutralen Lösung?', answers: ['7', '0', '14', '10'], correct: 0 },
-    { subjectKey: 'chemie', subjectName: 'Chemie', question: 'Welches Element hat das Symbol \'Au\'?', answers: ['Gold', 'Silber', 'Aluminium', 'Argon'], correct: 0 },
-    { subjectKey: 'chemie', subjectName: 'Chemie', question: 'Was entsteht bei der Reaktion von Natrium mit Wasser?', answers: ['Natriumhydroxid und Wasserstoff', 'Natriumoxid', 'Natriumchlorid', 'Nur Wasserstoff'], correct: 0 },
-    { subjectKey: 'chemie', subjectName: 'Chemie', question: 'Wie viele Elektronen befinden sich in der äußersten Schale von Sauerstoff?', answers: ['6', '8', '2', '4'], correct: 0 },
-    { subjectKey: 'chemie', subjectName: 'Chemie', question: 'Was ist die Summenformel von Kochsalz?', answers: ['NaCl', 'KCl', 'CaCl₂', 'NaCl₂'], correct: 0 },
-    { subjectKey: 'chemie', subjectName: 'Chemie', question: 'Welche Art von Bindung besteht zwischen H₂O-Molekülen?', answers: ['Wasserstoffbrückenbindung', 'Ionenbindung', 'Metallbindung', 'Kovalente Bindung'], correct: 0 },
-    { subjectKey: 'chemie', subjectName: 'Chemie', question: 'Was ist ein Katalysator?', answers: ['Stoff, der Reaktionen beschleunigt ohne verbraucht zu werden', 'Stoff, der Reaktionen verlangsamt', 'Endprodukt einer Reaktion', 'Stoff, der sich vollständig auflöst'], correct: 0 },
-    { subjectKey: 'chemie', subjectName: 'Chemie', question: 'Welche Masse hat ein Mol Kohlenstoff (C)?', answers: ['12 g', '6 g', '24 g', '1 g'], correct: 0 },
-
-    // Physik
-    { subjectKey: 'physik', subjectName: 'Physik', question: 'Was ist die Einheit der Kraft im SI-System?', answers: ['Newton (N)', 'Joule (J)', 'Watt (W)', 'Pascal (Pa)'], correct: 0 },
-    { subjectKey: 'physik', subjectName: 'Physik', question: 'Wie schnell breitet sich Licht im Vakuum aus?', answers: ['300.000 km/s', '150.000 km/s', '500.000 km/s', '100.000 km/s'], correct: 0 },
-    { subjectKey: 'physik', subjectName: 'Physik', question: 'Was besagt das erste Newtonsche Gesetz?', answers: ['Ein Körper bleibt in Ruhe oder gleichförmiger Bewegung, wenn keine Kraft wirkt', 'Kraft = Masse × Beschleunigung', 'Actio = Reactio', 'Energie bleibt erhalten'], correct: 0 },
-    { subjectKey: 'physik', subjectName: 'Physik', question: 'Was ist die Formel für die kinetische Energie?', answers: ['E = ½mv²', 'E = mgh', 'E = mc²', 'E = Pt'], correct: 0 },
-    { subjectKey: 'physik', subjectName: 'Physik', question: 'Wie groß ist die Erdbeschleunigung?', answers: ['9,81 m/s²', '10 m/s²', '8 m/s²', '12 m/s²'], correct: 0 },
-    { subjectKey: 'physik', subjectName: 'Physik', question: 'Was ist ein Frequenz von 1 Hertz?', answers: ['1 Schwingung pro Sekunde', '1 Meter pro Sekunde', '1 Welle pro Minute', '1 Umdrehung pro Minute'], correct: 0 },
-    { subjectKey: 'physik', subjectName: 'Physik', question: 'Welches Gesetz beschreibt den Zusammenhang zwischen Strom, Spannung und Widerstand?', answers: ['Ohmsches Gesetz', 'Coulombsches Gesetz', 'Kirchhoffsches Gesetz', 'Faradaysches Gesetz'], correct: 0 },
-    { subjectKey: 'physik', subjectName: 'Physik', question: 'Was passiert mit der Wellenlänge, wenn die Frequenz verdoppelt wird?', answers: ['Sie halbiert sich', 'Sie verdoppelt sich', 'Sie bleibt gleich', 'Sie vervierfacht sich'], correct: 0 },
-    { subjectKey: 'physik', subjectName: 'Physik', question: 'Was ist die Einheit der elektrischen Ladung?', answers: ['Coulomb (C)', 'Ampere (A)', 'Volt (V)', 'Ohm (Ω)'], correct: 0 },
-    { subjectKey: 'physik', subjectName: 'Physik', question: 'Welcher Aggregatzustand hat das höchste Volumen bei gleicher Masse?', answers: ['Gas', 'Flüssigkeit', 'Feststoff', 'Alle gleich'], correct: 0 },
-  ];
-
   // Insert all questions in a transaction
-  const insertMany = database.transaction((questions) => {
+  const insertMany = database.transaction((questions: any[]) => {
     for (const q of questions) {
       const answersJson = JSON.stringify(q.answers);
       insert.run(
@@ -312,7 +280,8 @@ export interface QuestionWithElo {
   timeoutCount: number;
 }
 
-// Central ELO calculation function
+// NOTE: This function is deprecated and kept for backwards compatibility only
+// Use lib/scoring/EloCalculator.ts for new code
 // ELO = 10 * (correct_answers / total_answers), rounded, capped 0-10
 // If never answered: null
 export function calculateElo(correctCount: number, totalCount: number): number | null {
@@ -325,36 +294,63 @@ export function calculateElo(correctCount: number, totalCount: number): number |
 export function getQuestionsWithEloBySubject(subjectKey: string, userId: number): QuestionWithElo[] {
   const db = getDatabase();
 
-  // Get answer counts, ELO calculated in code
-  const query = `
+  // Get all questions for this subject
+  const questionsQuery = `
     SELECT
       q.id,
       q.question,
       q.answers,
-      q.correct_index,
-      COUNT(al.id) as total_count,
-      COALESCE(SUM(CASE WHEN al.is_correct = 1 THEN 1 ELSE 0 END), 0) as correct_count,
-      COALESCE(SUM(CASE WHEN al.is_correct = 0 AND al.timeout_occurred = 0 THEN 1 ELSE 0 END), 0) as wrong_count,
-      COALESCE(SUM(CASE WHEN al.timeout_occurred = 1 THEN 1 ELSE 0 END), 0) as timeout_count
+      q.correct_index
     FROM questions q
-    LEFT JOIN answer_log al ON q.id = al.question_id AND al.user_id = ?
     WHERE q.subject_key = ?
-    GROUP BY q.id
     ORDER BY q.id
   `;
 
-  const rows = db.prepare(query).all(userId, subjectKey) as any[];
+  const questions = db.prepare(questionsQuery).all(subjectKey) as any[];
 
-  return rows.map(row => ({
-    id: row.id,
-    question: row.question,
-    answers: JSON.parse(row.answers),
-    correct: row.correct_index,
-    elo: calculateElo(row.correct_count, row.total_count),
-    correctCount: row.correct_count,
-    wrongCount: row.wrong_count,
-    timeoutCount: row.timeout_count
-  }));
+  // Get answer history for each question
+  const answersQuery = `
+    SELECT
+      is_correct,
+      timeout_occurred
+    FROM answer_log
+    WHERE question_id = ? AND user_id = ?
+    ORDER BY answered_at
+  `;
+
+  const answersStmt = db.prepare(answersQuery);
+
+  return questions.map(q => {
+    const answerRecords = answersStmt.all(q.id, userId) as Array<{
+      is_correct: number;
+      timeout_occurred: number;
+    }>;
+
+    // Convert to AnswerRecord format
+    const answers: AnswerRecord[] = answerRecords.map(record => ({
+      is_correct: record.is_correct === 1,
+      timeout_occurred: record.timeout_occurred === 1
+    }));
+
+    // Calculate progressive ELO
+    const elo = calculateEloOrNull(answers);
+
+    // Calculate counts for display
+    const correctCount = answers.filter(a => a.is_correct).length;
+    const wrongCount = answers.filter(a => !a.is_correct && !a.timeout_occurred).length;
+    const timeoutCount = answers.filter(a => a.timeout_occurred).length;
+
+    return {
+      id: q.id,
+      question: q.question,
+      answers: JSON.parse(q.answers),
+      correct: q.correct_index,
+      elo,
+      correctCount,
+      wrongCount,
+      timeoutCount
+    };
+  });
 }
 
 // Get average ELO per subject for session tracking
@@ -367,36 +363,65 @@ export interface SubjectEloScore {
 export function getSessionEloScores(userId: number): SubjectEloScore[] {
   const db = getDatabase();
 
-  // Get answer counts per question, calculate ELO in code
-  const query = `
+  // Get all questions grouped by subject
+  const questionsQuery = `
     SELECT
       q.subject_key,
       q.subject_name,
-      q.id,
-      COUNT(al.id) as total_count,
-      COALESCE(SUM(CASE WHEN al.is_correct = 1 THEN 1 ELSE 0 END), 0) as correct_count
+      q.id
     FROM questions q
-    LEFT JOIN answer_log al ON q.id = al.question_id AND al.user_id = ?
-    GROUP BY q.id, q.subject_key, q.subject_name
-    ORDER BY q.subject_key
+    ORDER BY q.subject_key, q.id
   `;
 
-  const rows = db.prepare(query).all(userId) as any[];
+  const questions = db.prepare(questionsQuery).all() as Array<{
+    subject_key: string;
+    subject_name: string;
+    id: number;
+  }>;
+
+  // Get answer history for user
+  const answersQuery = `
+    SELECT
+      question_id,
+      is_correct,
+      timeout_occurred
+    FROM answer_log
+    WHERE user_id = ?
+    ORDER BY question_id, answered_at
+  `;
+
+  const allAnswers = db.prepare(answersQuery).all(userId) as Array<{
+    question_id: number;
+    is_correct: number;
+    timeout_occurred: number;
+  }>;
+
+  // Group answers by question
+  const answersByQuestion = new Map<number, AnswerRecord[]>();
+  for (const answer of allAnswers) {
+    if (!answersByQuestion.has(answer.question_id)) {
+      answersByQuestion.set(answer.question_id, []);
+    }
+    answersByQuestion.get(answer.question_id)!.push({
+      is_correct: answer.is_correct === 1,
+      timeout_occurred: answer.timeout_occurred === 1
+    });
+  }
 
   // Calculate ELO per question, then average per subject
   const subjectElos: { [key: string]: { name: string; elos: number[] } } = {};
 
-  for (const row of rows) {
-    if (!subjectElos[row.subject_key]) {
-      subjectElos[row.subject_key] = {
-        name: row.subject_name,
+  for (const q of questions) {
+    if (!subjectElos[q.subject_key]) {
+      subjectElos[q.subject_key] = {
+        name: q.subject_name,
         elos: []
       };
     }
 
-    // Calculate ELO for this question (use 5 as default for unanswered)
-    const elo = calculateElo(row.correct_count, row.total_count) ?? 5;
-    subjectElos[row.subject_key].elos.push(elo);
+    const answers = answersByQuestion.get(q.id) || [];
+    const elo = calculateEloOrNull(answers) ?? 5; // Default to 5 if never answered
+    subjectElos[q.subject_key].elos.push(elo);
   }
 
   // Calculate average ELO per subject

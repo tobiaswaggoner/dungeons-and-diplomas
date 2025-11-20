@@ -5,7 +5,8 @@ import {
   TILE_SOURCE_SIZE,
   TILESET_COORDS
 } from '../constants';
-import type { TileType, TileVariant, TileCoord, Room, Player } from '../constants';
+import type { TileType, TileVariant, TileCoord, Room } from '../constants';
+import type { Player } from '../Enemy';
 import { SpriteSheetLoader } from '../SpriteSheetLoader';
 import { Enemy } from '../Enemy';
 

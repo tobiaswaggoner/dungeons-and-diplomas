@@ -3,7 +3,8 @@ import {
   DUNGEON_HEIGHT,
   TILE
 } from '../constants';
-import type { TileType, Room, Player } from '../constants';
+import type { TileType, Room } from '../constants';
+import type { Player } from '../Enemy';
 
 export class MinimapRenderer {
   render(

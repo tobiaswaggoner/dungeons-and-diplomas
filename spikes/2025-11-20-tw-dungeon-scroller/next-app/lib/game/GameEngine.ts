@@ -2,14 +2,15 @@ import {
   DUNGEON_WIDTH,
   DUNGEON_HEIGHT,
   TILE,
-  DIRECTION,
   ANIMATION,
-  PLAYER_SPEED_TILES,
-  PLAYER_SIZE
+  PLAYER_SPEED_TILES
 } from '../constants';
-import type { TileType, Player, Room } from '../constants';
+import type { TileType, Room, KeyboardState } from '../constants';
+import type { Player } from '../Enemy';
 import { SpriteSheetLoader } from '../SpriteSheetLoader';
 import { Enemy } from '../Enemy';
+import { CollisionDetector } from '../physics/CollisionDetector';
+import { DirectionCalculator } from '../movement/DirectionCalculator';
 
 export class GameEngine {
   public checkCollision(
@@ -18,34 +19,7 @@ export class GameEngine {
     tileSize: number,
     dungeon: TileType[][]
   ): boolean {
-    const playerSize = tileSize * PLAYER_SIZE;
-    const margin = (tileSize - playerSize) / 2;
-
-    const left = x + margin;
-    const right = x + tileSize - margin;
-    const top = y + margin;
-    const bottom = y + tileSize - margin;
-
-    const points = [
-      { x: left, y: top },
-      { x: right, y: top },
-      { x: left, y: bottom },
-      { x: right, y: bottom }
-    ];
-
-    for (let p of points) {
-      const tileX = Math.floor(p.x / tileSize);
-      const tileY = Math.floor(p.y / tileSize);
-
-      if (tileX < 0 || tileX >= DUNGEON_WIDTH || tileY < 0 || tileY >= DUNGEON_HEIGHT) {
-        return true;
-      }
-
-      if (dungeon[tileY][tileX] === TILE.WALL || dungeon[tileY][tileX] === TILE.EMPTY) {
-        return true;
-      }
-    }
-    return false;
+    return CollisionDetector.checkCollision(x, y, tileSize, dungeon);
   }
 
   public updateFogOfWar(
@@ -68,7 +42,7 @@ export class GameEngine {
   public updatePlayer(
     dt: number,
     player: Player,
-    keys: any,
+    keys: KeyboardState,
     tileSize: number,
     dungeon: TileType[][],
     roomMap: number[][],
@@ -104,11 +78,7 @@ export class GameEngine {
         player.y = newY;
       }
 
-      if (Math.abs(dx) > Math.abs(dy)) {
-        player.direction = dx > 0 ? DIRECTION.RIGHT : DIRECTION.LEFT;
-      } else {
-        player.direction = dy > 0 ? DIRECTION.DOWN : DIRECTION.UP;
-      }
+      player.direction = DirectionCalculator.calculateDirection(dx, dy);
 
       playerSprite?.playAnimation(player.direction, ANIMATION.RUN);
       this.updateFogOfWar(player, tileSize, roomMap, rooms);
