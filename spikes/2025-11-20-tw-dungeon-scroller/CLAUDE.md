@@ -63,7 +63,8 @@ next-app/
 │   ├── SpriteSheetLoader.ts            # Sprite animation system
 │   ├── Enemy.ts                        # Enemy class with AI
 │   ├── combat/
-│   │   └── QuestionSelector.ts         # ELO-based question selection algorithm
+│   │   ├── QuestionSelector.ts         # ELO-based question selection algorithm
+│   │   └── AnswerShuffler.ts           # Fisher-Yates answer shuffling
 │   ├── dungeon/
 │   │   ├── BSPNode.ts                  # Binary Space Partitioning tree
 │   │   ├── UnionFind.ts                # Union-Find for connectivity
@@ -71,9 +72,17 @@ next-app/
 │   ├── game/
 │   │   ├── GameEngine.ts               # Core game loop logic
 │   │   └── DungeonManager.ts           # Dungeon state management
-│   └── rendering/
-│       ├── GameRenderer.ts             # Main canvas rendering
-│       └── MinimapRenderer.ts          # Minimap rendering
+│   ├── movement/
+│   │   └── DirectionCalculator.ts      # Direction calculation utility
+│   ├── physics/
+│   │   └── CollisionDetector.ts        # Collision detection utility
+│   ├── scoring/
+│   │   └── EloCalculator.ts            # Progressive ELO calculation
+│   ├── rendering/
+│   │   ├── GameRenderer.ts             # Main canvas rendering
+│   │   └── MinimapRenderer.ts          # Minimap rendering
+│   └── data/
+│       └── seed-questions.json         # Question seed data (30 questions)
 ├── data/
 │   └── game.db                         # SQLite database
 └── public/
@@ -190,7 +199,7 @@ function calculateElo(correctCount: number, totalCount: number): number | null {
 **Database Seeding:**
 - Automatically seeds 30 questions on first run
 - 10 questions each: Mathematik, Chemie, Physik
-- Questions sourced from `lib/questions.ts`
+- Questions sourced from `lib/data/seed-questions.json`
 
 ## API Routes
 
@@ -531,6 +540,46 @@ ELO = Math.round(10.0 * correctCount / totalCount)
 - Walls/doors visible if any adjacent room is visible
 - Minimap respects fog of war
 
+### 10. Utility Modules
+
+The codebase includes several utility modules extracted during refactoring for better code organization and reusability:
+
+**CollisionDetector** (lib/physics/CollisionDetector.ts)
+- Purpose: Collision detection for game entities
+- Method: `checkCollision(x, y, tileSize, dungeon, entitySizeMultiplier)`
+- Uses reduced hitbox (PLAYER_SIZE multiplier, default 0.5)
+- Checks all 4 corners of bounding box against dungeon grid
+- Returns `true` if collision with walls (TILE.WALL) or empty tiles (TILE.EMPTY)
+- Used by: GameEngine for player movement, Enemy for pathfinding
+
+**DirectionCalculator** (lib/movement/DirectionCalculator.ts)
+- Purpose: Calculate facing direction from movement delta
+- Method: `calculateDirection(dx, dy)`
+- Prioritizes horizontal movement over vertical when magnitudes are similar
+- Returns: Direction enum (UP, DOWN, LEFT, RIGHT)
+- Used by: GameEngine for player direction, Enemy for sprite orientation
+
+**AnswerShuffler** (lib/combat/AnswerShuffler.ts)
+- Purpose: Shuffle quiz answers to prevent memorization
+- Method: `shuffleAnswers(answers, correctIndex)`
+- Uses Fisher-Yates shuffle algorithm
+- Tracks correct answer position through shuffle
+- Returns: `{ shuffledAnswers: string[], correctIndex: number }`
+- Used by: useCombat hook during question display
+
+**EloCalculator** (lib/scoring/EloCalculator.ts)
+- Purpose: Progressive ELO calculation for question difficulty
+- Scale: 1-10 (1 = hardest, 10 = easiest)
+- Starting ELO: 5 (middle difficulty)
+- Algorithm:
+  - Correct answer: `elo = ceil((elo + (10 - elo) / 3) * 10) / 10` (moves toward 10)
+  - Wrong/Timeout: `elo = floor((elo - (elo - 1) / 4) * 10) / 10` (moves toward 1)
+- Methods:
+  - `calculateProgressiveElo(answers, startingElo)`: Returns ELO with 1 decimal place
+  - `calculateRoundedElo(answers, startingElo)`: Returns ELO rounded to integer
+  - `calculateEloOrNull(answers, startingElo)`: Returns ELO or null if no answers
+- Used by: `/api/stats` route for statistics calculation
+
 ## TypeScript Types (lib/constants.ts)
 
 ### Core Types
@@ -631,6 +680,51 @@ export interface AnswerLogEntry {
 - `MINIMAP_WIDTH`: 200 (pixels)
 - `MINIMAP_HEIGHT`: 200 (pixels)
 
+### Enum-like Constants (Refactored)
+
+The codebase uses TypeScript const objects for type-safe enums:
+
+**TILE** (Tile Types)
+```typescript
+export const TILE = {
+  EMPTY: 0,
+  FLOOR: 1,
+  WALL: 2,
+  DOOR: 3,
+  CORNER: 4
+} as const;
+```
+
+**DIRECTION** (Cardinal Directions)
+```typescript
+export const DIRECTION = {
+  UP: 'up',
+  DOWN: 'down',
+  LEFT: 'left',
+  RIGHT: 'right'
+} as const;
+```
+
+**ANIMATION** (Animation Types)
+```typescript
+export const ANIMATION = {
+  SPELLCAST: 'spellcast',
+  THRUST: 'thrust',
+  WALK: 'walk',
+  SLASH: 'slash',
+  SHOOT: 'shoot',
+  HURT: 'hurt',
+  CLIMB: 'climb',
+  IDLE: 'idle',
+  JUMP: 'jump',
+  SIT: 'sit',
+  EMOTE: 'emote',
+  RUN: 'run',
+  WATERING: 'watering',
+  COMBAT: 'combat'
+} as const;
+```
+
 ## Development Workflow
 
 ### Running the Next.js App
@@ -662,7 +756,7 @@ rm next-app/data/game.db
 
 **Seed Questions:**
 - Automatically seeded on first run
-- Edit `lib/questions.ts` to modify seed data
+- Edit `lib/data/seed-questions.json` to modify seed data
 - Questions: 30 total (10 per subject)
 
 ### Controls
@@ -803,10 +897,12 @@ Two different ELO calculation methods exist:
 
 ### Architecture Changes
 - **Single HTML file → Modular Next.js app**
-- **Embedded questions → SQLite database**
+- **Embedded questions → SQLite database with JSON seed data**
 - **Inline JavaScript → TypeScript with strict typing**
 - **Global variables → React hooks and refs**
 - **Monolithic code → Separated concerns** (hooks, components, lib)
+- **Magic strings/numbers → Type-safe const enums** (TILE, DIRECTION, ANIMATION)
+- **Inline algorithms → Extracted utility modules** (CollisionDetector, DirectionCalculator, AnswerShuffler, EloCalculator)
 
 ## Future Enhancements (Planned)
 
