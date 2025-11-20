@@ -247,38 +247,46 @@ export default function SkillDashboard({ userId, onClose }: SkillDashboardProps)
                       <tbody>
                         {subjectData.questions.map((q) => {
                           const questionMastery = getMasteryLevel(q.elo);
+                          const isPerfect = q.elo === 10;
                           return (
                             <tr
                               key={q.id}
                               style={{
                                 borderBottom: '1px solid #2a2a2a',
-                                backgroundColor: questionMastery.bgColor
+                                backgroundColor: isPerfect
+                                  ? 'rgba(255, 215, 0, 0.15)'
+                                  : questionMastery.bgColor,
+                                position: 'relative',
+                                boxShadow: isPerfect
+                                  ? '0 0 20px rgba(255, 215, 0, 0.5), inset 0 0 20px rgba(255, 215, 0, 0.1)'
+                                  : 'none'
                               }}
                             >
                               <td style={{
-                                padding: '12px 10px',
-                                color: '#ddd'
+                                padding: '4px 10px',
+                                color: isPerfect ? '#FFD700' : '#ddd',
+                                fontWeight: isPerfect ? 'bold' : 'normal'
                               }}>{q.question}</td>
                               <td style={{
-                                padding: '12px 10px',
+                                padding: '4px 10px',
                                 textAlign: 'center',
                                 color: '#4CAF50',
                                 fontWeight: 'bold'
                               }}>{q.correct}</td>
                               <td style={{
-                                padding: '12px 10px',
+                                padding: '4px 10px',
                                 textAlign: 'center',
                                 color: '#f44336',
                                 fontWeight: 'bold'
                               }}>{q.wrong}</td>
                               <td style={{
-                                padding: '12px 10px',
+                                padding: '4px 10px',
                                 textAlign: 'center',
                                 color: '#ff9800',
                                 fontWeight: 'bold'
                               }}>{q.timeout}</td>
                               <td style={{
-                                padding: '12px 10px',
+                                padding: '4px 10px',
                                 textAlign: 'center'
                               }}>
                                 <div style={{
@@ -286,13 +294,16 @@ export default function SkillDashboard({ userId, onClose }: SkillDashboardProps)
                                   alignItems: 'center',
                                   gap: '6px',
                                   padding: '4px 10px',
-                                  backgroundColor: questionMastery.color,
+                                  backgroundColor: isPerfect ? '#FFD700' : questionMastery.color,
                                   borderRadius: '6px',
                                   fontSize: '14px',
                                   fontWeight: 'bold',
-                                  color: '#000'
+                                  color: '#000',
+                                  boxShadow: isPerfect ? '0 0 10px rgba(255, 215, 0, 0.8)' : 'none'
                                 }}>
-                                  <span style={{ fontSize: '16px' }}>{questionMastery.icon}</span>
+                                  <span style={{ fontSize: '16px' }}>
+                                    {isPerfect ? '👑' : questionMastery.icon}
+                                  </span>
                                   <span>{q.elo}</span>
                                 </div>
                               </td>

@@ -1,0 +1,252 @@
+'use client';
+
+interface SubjectScore {
+  subjectKey: string;
+  subjectName: string;
+  startElo: number;
+  currentElo: number;
+  questionsAnswered: number;
+}
+
+interface CharacterPanelProps {
+  username: string;
+  scores: SubjectScore[];
+  onLogout: () => void;
+  onRestart: () => void;
+  onSkills: () => void;
+}
+
+export default function CharacterPanel({
+  username,
+  scores,
+  onLogout,
+  onRestart,
+  onSkills
+}: CharacterPanelProps) {
+  // Unified color scheme for cleaner look
+  const primaryColor = '#4CAF50'; // Green for all subjects
+  const gainColor = '#00ff00'; // Bright green for improvements
+  const lossColor = '#ff4444'; // Bright red for losses
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: '10px',
+      left: '10px',
+      zIndex: 100,
+      backgroundColor: 'rgba(0, 0, 0, 0.85)',
+      border: '2px solid #4CAF50',
+      borderRadius: '12px',
+      padding: '15px',
+      minWidth: '280px',
+      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.7)'
+    }}>
+      {/* Header - Username */}
+      <div style={{
+        fontSize: '20px',
+        fontWeight: 'bold',
+        color: '#4CAF50',
+        marginBottom: '12px',
+        paddingBottom: '10px',
+        borderBottom: '1px solid rgba(76, 175, 80, 0.3)',
+        textAlign: 'center',
+        textShadow: '0 0 10px rgba(76, 175, 80, 0.5)'
+      }}>
+        {username}
+      </div>
+
+      {/* Scores Section */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        marginBottom: '12px',
+        minHeight: scores.length === 0 ? '80px' : 'auto'
+      }}>
+        {scores.length === 0 ? (
+          // Show placeholder if no scores loaded yet
+          <div style={{
+            textAlign: 'center',
+            color: '#888',
+            fontSize: '12px',
+            padding: '20px'
+          }}>
+            Lade Statistiken...
+          </div>
+        ) : (
+          scores.map((score) => {
+          return (
+            <div
+              key={score.subjectKey}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 8px',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '6px',
+                border: `1px solid ${primaryColor}30`
+              }}
+            >
+              {/* Subject Name */}
+              <div style={{
+                fontSize: '11px',
+                fontWeight: 'bold',
+                color: primaryColor,
+                minWidth: '55px',
+                textShadow: `0 0 4px ${primaryColor}80`
+              }}>
+                {score.subjectName}
+              </div>
+
+              {/* ELO Circles (1-10) */}
+              <div style={{
+                display: 'flex',
+                gap: '2px',
+                flex: 1
+              }}>
+                {Array.from({ length: 10 }, (_, i) => {
+                  const index = i + 1;
+                  const isFilled = index <= score.currentElo;
+                  const wasAtStart = index <= score.startElo;
+
+                  // Determine circle state
+                  let circleColor = '#333';
+                  let glowColor = 'none';
+
+                  if (isFilled) {
+                    circleColor = primaryColor;
+
+                    // Check if this is a gained point - stronger glow
+                    if (index > score.startElo) {
+                      glowColor = `0 0 8px ${gainColor}, 0 0 12px ${gainColor}`;
+                    }
+                  } else if (wasAtStart && !isFilled) {
+                    // Lost point - stronger glow
+                    circleColor = lossColor;
+                    glowColor = `0 0 8px ${lossColor}, 0 0 12px ${lossColor}`;
+                  }
+
+                  return (
+                    <div
+                      key={index}
+                      style={{
+                        width: '9px',
+                        height: '9px',
+                        borderRadius: '50%',
+                        backgroundColor: circleColor,
+                        border: isFilled ? 'none' : '1px solid #555',
+                        boxShadow: glowColor,
+                        transition: 'all 0.3s ease'
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Questions answered badge */}
+              {score.questionsAnswered > 0 && (
+                <div style={{
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  color: '#000',
+                  backgroundColor: '#FFD700',
+                  padding: '2px 6px',
+                  borderRadius: '3px',
+                  minWidth: '16px',
+                  textAlign: 'center'
+                }}>
+                  {score.questionsAnswered}
+                </div>
+              )}
+            </div>
+          );
+        })
+        )}
+      </div>
+
+      {/* Buttons - Compact */}
+      <div style={{
+        display: 'flex',
+        gap: '4px',
+        paddingTop: '8px',
+        borderTop: '1px solid rgba(76, 175, 80, 0.2)'
+      }}>
+        <button
+          onClick={onRestart}
+          title="Restart"
+          style={{
+            flex: 1,
+            padding: '5px 8px',
+            fontSize: '11px',
+            fontWeight: '600',
+            backgroundColor: 'rgba(76, 175, 80, 0.3)',
+            color: '#4CAF50',
+            border: '1px solid rgba(76, 175, 80, 0.5)',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.5)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.3)';
+          }}
+        >
+          🔄
+        </button>
+
+        <button
+          onClick={onSkills}
+          title="Skills"
+          style={{
+            flex: 1,
+            padding: '5px 8px',
+            fontSize: '11px',
+            fontWeight: '600',
+            backgroundColor: 'rgba(33, 150, 243, 0.3)',
+            color: '#2196F3',
+            border: '1px solid rgba(33, 150, 243, 0.5)',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(33, 150, 243, 0.5)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(33, 150, 243, 0.3)';
+          }}
+        >
+          📊
+        </button>
+
+        <button
+          onClick={onLogout}
+          title="Logout"
+          style={{
+            flex: 1,
+            padding: '5px 8px',
+            fontSize: '11px',
+            fontWeight: '600',
+            backgroundColor: 'rgba(244, 67, 54, 0.3)',
+            color: '#f44336',
+            border: '1px solid rgba(244, 67, 54, 0.5)',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.5)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(244, 67, 54, 0.3)';
+          }}
+        >
+          🚪
+        </button>
+      </div>
+    </div>
+  );
+}

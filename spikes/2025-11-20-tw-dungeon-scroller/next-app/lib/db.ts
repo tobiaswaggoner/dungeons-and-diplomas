@@ -292,3 +292,120 @@ export function getQuestionById(id: number): QuestionRow | undefined {
   const db = getDatabase();
   return db.prepare('SELECT * FROM questions WHERE id = ?').get(id) as QuestionRow | undefined;
 }
+
+// Get all distinct subjects
+export function getAllSubjects(): string[] {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT DISTINCT subject_key FROM questions').all() as { subject_key: string }[];
+  return rows.map(row => row.subject_key);
+}
+
+// Get questions with ELO scores for a specific subject and user
+export interface QuestionWithElo {
+  id: number;
+  question: string;
+  answers: string[];
+  correct: number;
+  elo: number | null;
+  correctCount: number;
+  wrongCount: number;
+  timeoutCount: number;
+}
+
+// Central ELO calculation function
+// ELO = 10 * (correct_answers / total_answers), rounded, capped 0-10
+// If never answered: null
+export function calculateElo(correctCount: number, totalCount: number): number | null {
+  if (totalCount === 0) {
+    return null;
+  }
+  return Math.round(10.0 * correctCount / totalCount);
+}
+
+export function getQuestionsWithEloBySubject(subjectKey: string, userId: number): QuestionWithElo[] {
+  const db = getDatabase();
+
+  // Get answer counts, ELO calculated in code
+  const query = `
+    SELECT
+      q.id,
+      q.question,
+      q.answers,
+      q.correct_index,
+      COUNT(al.id) as total_count,
+      COALESCE(SUM(CASE WHEN al.is_correct = 1 THEN 1 ELSE 0 END), 0) as correct_count,
+      COALESCE(SUM(CASE WHEN al.is_correct = 0 AND al.timeout_occurred = 0 THEN 1 ELSE 0 END), 0) as wrong_count,
+      COALESCE(SUM(CASE WHEN al.timeout_occurred = 1 THEN 1 ELSE 0 END), 0) as timeout_count
+    FROM questions q
+    LEFT JOIN answer_log al ON q.id = al.question_id AND al.user_id = ?
+    WHERE q.subject_key = ?
+    GROUP BY q.id
+    ORDER BY q.id
+  `;
+
+  const rows = db.prepare(query).all(userId, subjectKey) as any[];
+
+  return rows.map(row => ({
+    id: row.id,
+    question: row.question,
+    answers: JSON.parse(row.answers),
+    correct: row.correct_index,
+    elo: calculateElo(row.correct_count, row.total_count),
+    correctCount: row.correct_count,
+    wrongCount: row.wrong_count,
+    timeoutCount: row.timeout_count
+  }));
+}
+
+// Get average ELO per subject for session tracking
+export interface SubjectEloScore {
+  subjectKey: string;
+  subjectName: string;
+  averageElo: number;
+}
+
+export function getSessionEloScores(userId: number): SubjectEloScore[] {
+  const db = getDatabase();
+
+  // Get answer counts per question, calculate ELO in code
+  const query = `
+    SELECT
+      q.subject_key,
+      q.subject_name,
+      q.id,
+      COUNT(al.id) as total_count,
+      COALESCE(SUM(CASE WHEN al.is_correct = 1 THEN 1 ELSE 0 END), 0) as correct_count
+    FROM questions q
+    LEFT JOIN answer_log al ON q.id = al.question_id AND al.user_id = ?
+    GROUP BY q.id, q.subject_key, q.subject_name
+    ORDER BY q.subject_key
+  `;
+
+  const rows = db.prepare(query).all(userId) as any[];
+
+  // Calculate ELO per question, then average per subject
+  const subjectElos: { [key: string]: { name: string; elos: number[] } } = {};
+
+  for (const row of rows) {
+    if (!subjectElos[row.subject_key]) {
+      subjectElos[row.subject_key] = {
+        name: row.subject_name,
+        elos: []
+      };
+    }
+
+    // Calculate ELO for this question (use 5 as default for unanswered)
+    const elo = calculateElo(row.correct_count, row.total_count) ?? 5;
+    subjectElos[row.subject_key].elos.push(elo);
+  }
+
+  // Calculate average ELO per subject
+  return Object.entries(subjectElos).map(([key, data]) => {
+    const avg = data.elos.reduce((sum, elo) => sum + elo, 0) / data.elos.length;
+    return {
+      subjectKey: key,
+      subjectName: data.name,
+      averageElo: Math.round(avg)
+    };
+  });
+}

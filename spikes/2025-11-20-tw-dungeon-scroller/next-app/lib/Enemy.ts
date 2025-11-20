@@ -27,16 +27,22 @@ export class Enemy {
   hp: number = GOBLIN_MAX_HP;
   maxHp: number = GOBLIN_MAX_HP;
 
+  // Level and subject
+  level: number;
+  subject: string;
+
   // AI state
   aiState: AIStateType = AI_STATE.IDLE;
   waypoint: { x: number; y: number } | null = null;
   idleTimer: number = 0;
 
-  constructor(x: number, y: number, spriteName: string, roomId: number) {
+  constructor(x: number, y: number, spriteName: string, roomId: number, level: number, subject: string) {
     this.x = x;
     this.y = y;
     this.roomId = roomId;
     this.spriteName = spriteName;
+    this.level = level;
+    this.subject = subject;
   }
 
   async load() {
@@ -263,5 +269,45 @@ export class Enemy {
 
     // Draw alive or dead (corpse)
     this.sprite.draw(ctx, this.x, this.y, tileSize, tileSize);
+
+    // Draw status bar (only if alive)
+    if (this.alive) {
+      const statusText = `${this.subject} | Lvl ${this.level} | HP ${this.hp}`;
+
+      // Color based on level: 1-3 green, 4-7 yellow, 8-10 red
+      let borderColor = '#4CAF50'; // green
+      if (this.level >= 8) {
+        borderColor = '#FF4444'; // red
+      } else if (this.level >= 4) {
+        borderColor = '#FFC107'; // yellow
+      }
+
+      ctx.save();
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+
+      // Measure text width
+      const textWidth = ctx.measureText(statusText).width;
+      const padding = 6;
+      const barWidth = textWidth + padding * 2;
+      const barHeight = 20;
+      const barX = this.x + tileSize / 2 - barWidth / 2;
+      const barY = this.y - barHeight - 4;
+
+      // Draw background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+
+      // Draw border with level-based color
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+      // Draw text with level-based color
+      ctx.fillStyle = borderColor;
+      ctx.fillText(statusText, this.x + tileSize / 2, barY + 14);
+
+      ctx.restore();
+    }
   }
 }

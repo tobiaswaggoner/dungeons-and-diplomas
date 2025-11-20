@@ -8,6 +8,7 @@ import { createEmptyDungeon, generateTileVariants, generateRooms, connectRooms, 
 import type { Question, QuestionDatabase } from '@/lib/questions';
 import LoginModal from './LoginModal';
 import SkillDashboard from './SkillDashboard';
+import CharacterPanel from './CharacterPanel';
 import {
   DUNGEON_WIDTH,
   DUNGEON_HEIGHT,
@@ -30,6 +31,18 @@ export default function GameCanvas() {
   const minimapRef = useRef<HTMLCanvasElement>(null);
   const [gameInitialized, setGameInitialized] = useState(false);
   const [questionDatabase, setQuestionDatabase] = useState<QuestionDatabase | null>(null);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+
+  // Score tracking
+  interface SubjectScore {
+    subjectKey: string;
+    subjectName: string;
+    startElo: number;
+    currentElo: number;
+    questionsAnswered: number;
+  }
+  const [sessionScores, setSessionScores] = useState<SubjectScore[]>([]);
+  const sessionStartEloRef = useRef<{ [key: string]: number }>({});
 
   // User/Auth state
   const [userId, setUserId] = useState<number | null>(null);
@@ -41,7 +54,7 @@ export default function GameCanvas() {
   const [inCombat, setInCombat] = useState(false);
   const inCombatRef = useRef(false); // Use ref for immediate updates in game loop
   const [combatSubject, setCombatSubject] = useState('');
-  const [combatQuestion, setCombatQuestion] = useState<Question & { shuffledAnswers: string[]; correctIndex: number } | null>(null);
+  const [combatQuestion, setCombatQuestion] = useState<Question & { shuffledAnswers: string[]; correctIndex: number; elo: number | null } | null>(null);
   const [combatTimer, setCombatTimer] = useState(COMBAT_TIME_LIMIT);
   const [combatFeedback, setCombatFeedback] = useState('');
   const [playerHp, setPlayerHp] = useState(PLAYER_MAX_HP);
@@ -85,6 +98,7 @@ export default function GameCanvas() {
   const isMountedRef = useRef(true);
   const questionStartTimeRef = useRef<number>(0);
   const gamePausedRef = useRef(false);
+  const askedQuestionsRef = useRef<Set<number>>(new Set());
 
   // Check localStorage for existing user on mount
   useEffect(() => {
@@ -92,34 +106,76 @@ export default function GameCanvas() {
     const storedUsername = localStorage.getItem('username');
 
     if (storedUserId && storedUsername) {
-      setUserId(parseInt(storedUserId, 10));
+      const id = parseInt(storedUserId, 10);
+      setUserId(id);
       setUsername(storedUsername);
       setShowLogin(false);
+
+      // Load session ELOs for existing user
+      loadSessionElos(id);
     }
   }, []);
 
-  // Load questions from API
-  useEffect(() => {
-    const loadQuestions = async () => {
-      try {
-        const response = await fetch('/api/questions');
-        if (!response.ok) {
-          throw new Error('Failed to load questions');
+  const loadSessionElos = async (id: number) => {
+    try {
+      const response = await fetch(`/api/session-elo?userId=${id}`);
+      if (response.ok) {
+        const eloScores = await response.json();
+        const startElos: { [key: string]: number } = {};
+        const scores: SubjectScore[] = [];
+
+        for (const score of eloScores) {
+          startElos[score.subjectKey] = score.averageElo;
+          scores.push({
+            subjectKey: score.subjectKey,
+            subjectName: score.subjectName,
+            startElo: score.averageElo,
+            currentElo: score.averageElo,
+            questionsAnswered: 0
+          });
         }
-        const data = await response.json();
-        setQuestionDatabase(data);
+
+        sessionStartEloRef.current = startElos;
+        setSessionScores(scores);
+      }
+    } catch (error) {
+      console.error('Error loading session ELO:', error);
+    }
+  };
+
+  // Load questions and subjects from API
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [questionsResponse, subjectsResponse] = await Promise.all([
+          fetch('/api/questions'),
+          fetch('/api/subjects')
+        ]);
+
+        if (!questionsResponse.ok || !subjectsResponse.ok) {
+          throw new Error('Failed to load game data');
+        }
+
+        const questions = await questionsResponse.json();
+        const subjects = await subjectsResponse.json();
+
+        setQuestionDatabase(questions);
+        setAvailableSubjects(subjects);
       } catch (error) {
-        console.error('Error loading questions:', error);
+        console.error('Error loading game data:', error);
       }
     };
 
-    loadQuestions();
+    loadData();
   }, []);
 
-  const handleLogin = (id: number, name: string) => {
+  const handleLogin = async (id: number, name: string) => {
     setUserId(id);
     setUsername(name);
     setShowLogin(false);
+
+    // Load session start ELOs
+    await loadSessionElos(id);
   };
 
   const handleLogout = async () => {
@@ -343,16 +399,27 @@ export default function GameCanvas() {
 
       if (roomFloorTiles.length > 0) {
         const spawnPos = roomFloorTiles[Math.floor(Math.random() * roomFloorTiles.length)];
+
+        // Assign random level (1-10)
+        const level = Math.floor(Math.random() * 10) + 1;
+
+        // Assign random subject (if available)
+        const subject = availableSubjects.length > 0
+          ? availableSubjects[Math.floor(Math.random() * availableSubjects.length)]
+          : 'mathe';
+
         const enemy = new Enemy(
           spawnPos.x * tileSizeRef.current,
           spawnPos.y * tileSizeRef.current,
           'goblin',
-          i
+          i,
+          level,
+          subject
         );
         await enemy.load();
         enemiesRef.current.push(enemy);
         spawnedCount++;
-        console.log(`Spawned enemy ${spawnedCount} in room ${i} at tile (${spawnPos.x}, ${spawnPos.y})`);
+        console.log(`Spawned enemy ${spawnedCount} in room ${i} at tile (${spawnPos.x}, ${spawnPos.y}), Level: ${level}, Subject: ${subject}`);
       }
     }
 
@@ -361,9 +428,38 @@ export default function GameCanvas() {
     console.log('===== SPAWN ENEMIES FINISHED =====');
   };
 
+  const updateSessionScores = async (subjectKey: string) => {
+    if (!userId) return;
+
+    try {
+      // Fetch updated ELO scores
+      const response = await fetch(`/api/session-elo?userId=${userId}`);
+      if (!response.ok) return;
+
+      const eloScores = await response.json();
+
+      setSessionScores(prevScores => {
+        return prevScores.map(score => {
+          const updated = eloScores.find((s: any) => s.subjectKey === score.subjectKey);
+          if (!updated) return score;
+
+          return {
+            ...score,
+            currentElo: updated.averageElo,
+            questionsAnswered: score.subjectKey === subjectKey
+              ? score.questionsAnswered + 1
+              : score.questionsAnswered
+          };
+        });
+      });
+    } catch (error) {
+      console.error('Failed to update session scores:', error);
+    }
+  };
+
   const startCombat = (enemy: Enemy) => {
-    if (!questionDatabase) {
-      console.error('Question database not loaded yet');
+    if (!questionDatabase || !userId) {
+      console.error('Question database or user not loaded yet');
       return;
     }
 
@@ -371,64 +467,131 @@ export default function GameCanvas() {
     inCombatRef.current = true;
     currentEnemyRef.current = enemy;
 
-    const subjects = Object.keys(questionDatabase);
-    const subject = subjects[Math.floor(Math.random() * subjects.length)];
-    currentSubjectRef.current = subject;
-    setCombatSubject(questionDatabase[subject].subject);
+    // Use enemy's subject instead of random
+    currentSubjectRef.current = enemy.subject;
+    setCombatSubject(questionDatabase[enemy.subject]?.subject || enemy.subject);
+
+    // Reset asked questions for this combat
+    askedQuestionsRef.current = new Set();
 
     askQuestion();
   };
 
-  const askQuestion = () => {
+  const askQuestion = async () => {
     if (!currentEnemyRef.current?.alive || playerRef.current.hp <= 0) {
       endCombat();
       return;
     }
 
-    if (!questionDatabase) {
-      console.error('Question database not loaded');
+    if (!questionDatabase || !userId) {
+      console.error('Question database or user not loaded');
       endCombat();
       return;
     }
 
-    const questionPool = questionDatabase[currentSubjectRef.current].questions;
-    const questionData = questionPool[Math.floor(Math.random() * questionPool.length)];
+    const enemy = currentEnemyRef.current;
 
-    // Shuffle answers
-    const correctAnswerText = questionData.answers[questionData.correct];
-    const indices = questionData.answers.map((_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
+    // Fetch questions with ELO scores for this subject
+    try {
+      const response = await fetch(`/api/questions-with-elo?subject=${enemy.subject}&userId=${userId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch questions with ELO');
+      }
 
-    const shuffledAnswers = indices.map(i => questionData.answers[i]);
-    const correctIndex = shuffledAnswers.indexOf(correctAnswerText);
+      const questionsWithElo = await response.json();
 
-    setCombatQuestion({
-      ...questionData,
-      shuffledAnswers,
-      correctIndex
-    });
-    setCombatFeedback('');
-    setCombatTimer(COMBAT_TIME_LIMIT);
-    setEnemyHp(currentEnemyRef.current?.hp ?? 0);
+      // Intelligent question selection algorithm
+      // 1. Filter out already asked questions
+      const availableQuestions = questionsWithElo.filter((q: any) => !askedQuestionsRef.current.has(q.id));
 
-    // Track question start time
-    questionStartTimeRef.current = Date.now();
+      if (availableQuestions.length === 0) {
+        console.warn('No more questions available, reusing questions');
+        // If all questions asked, reset and start over
+        askedQuestionsRef.current.clear();
+        availableQuestions.push(...questionsWithElo);
+      }
 
-    // Start timer
-    if (combatTimerIntervalRef.current) clearInterval(combatTimerIntervalRef.current);
-    combatTimerIntervalRef.current = setInterval(() => {
-      setCombatTimer(prev => {
-        if (prev <= 1) {
-          if (combatTimerIntervalRef.current) clearInterval(combatTimerIntervalRef.current);
-          answerQuestion(-1);
-          return 0;
+      // 2. Calculate difficulty threshold: Question-ELO <= (11 - MonsterLevel)
+      const maxElo = 11 - enemy.level;
+
+      // 3. Filter questions by difficulty
+      let suitableQuestions = availableQuestions.filter((q: any) => {
+        // If question has ELO (has been answered), check if it's suitable
+        if (q.elo !== null) {
+          return q.elo <= maxElo;
         }
-        return prev - 1;
+        return false;
       });
-    }, 1000);
+
+      // 4. Fallback chain
+      let selectedQuestion;
+
+      if (suitableQuestions.length > 0) {
+        // Pick from suitable questions (hardest first = lowest ELO)
+        suitableQuestions.sort((a: any, b: any) => (a.elo ?? 0) - (b.elo ?? 0));
+        selectedQuestion = suitableQuestions[0];
+      } else {
+        // Fallback 1: Unanswered questions (ELO = null)
+        const unansweredQuestions = availableQuestions.filter((q: any) => q.elo === null);
+        if (unansweredQuestions.length > 0) {
+          selectedQuestion = unansweredQuestions[Math.floor(Math.random() * unansweredQuestions.length)];
+        } else {
+          // Fallback 2: Next easiest question
+          availableQuestions.sort((a: any, b: any) => (b.elo ?? 0) - (a.elo ?? 0));
+          selectedQuestion = availableQuestions[0];
+        }
+      }
+
+      // Mark question as asked
+      askedQuestionsRef.current.add(selectedQuestion.id);
+
+      // Shuffle answers
+      const correctAnswerText = selectedQuestion.answers[selectedQuestion.correct];
+      const indices = selectedQuestion.answers.map((_: any, i: number) => i);
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+
+      const shuffledAnswers = indices.map(i => selectedQuestion.answers[i]);
+      const correctIndex = shuffledAnswers.indexOf(correctAnswerText);
+
+      console.log('Selected question:', {
+        id: selectedQuestion.id,
+        question: selectedQuestion.question,
+        elo: selectedQuestion.elo,
+        enemyLevel: enemy.level,
+        maxElo: maxElo
+      });
+
+      setCombatQuestion({
+        ...selectedQuestion,
+        shuffledAnswers,
+        correctIndex
+      });
+      setCombatFeedback('');
+      setCombatTimer(COMBAT_TIME_LIMIT);
+      setEnemyHp(enemy.hp);
+
+      // Track question start time
+      questionStartTimeRef.current = Date.now();
+
+      // Start timer
+      if (combatTimerIntervalRef.current) clearInterval(combatTimerIntervalRef.current);
+      combatTimerIntervalRef.current = setInterval(() => {
+        setCombatTimer(prev => {
+          if (prev <= 1) {
+            if (combatTimerIntervalRef.current) clearInterval(combatTimerIntervalRef.current);
+            answerQuestion(-1);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (error) {
+      console.error('Error fetching questions:', error);
+      endCombat();
+    }
   };
 
   const answerQuestion = async (selectedIndex: number) => {
@@ -459,6 +622,9 @@ export default function GameCanvas() {
             timeout_occurred: isTimeout
           })
         });
+
+        // Update session scores
+        updateSessionScores(currentSubjectRef.current);
       } catch (error) {
         console.error('Failed to track answer:', error);
         // Continue game even if tracking fails
@@ -900,68 +1066,16 @@ export default function GameCanvas() {
       )}
 
       <div style={{ position: 'relative', width: '100vw', height: '100vh', backgroundColor: '#000000' }}>
-        <div style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 100, display: 'flex', gap: '10px', flexDirection: 'column' }}>
-          <button
-            onClick={() => generateNewDungeon()}
-            style={{
-              padding: '10px 20px',
-              fontSize: '16px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              opacity: 0.8
-            }}
-            onMouseOver={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.backgroundColor = '#45a049'; }}
-            onMouseOut={(e) => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.backgroundColor = '#4CAF50'; }}
-          >
-            Neuen Dungeon generieren
-          </button>
-          {username && (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ color: 'white', fontSize: '14px', backgroundColor: 'rgba(0,0,0,0.7)', padding: '5px 10px', borderRadius: '4px' }}>
-                  {username}
-                </span>
-              </div>
-              <button
-                onClick={handleOpenSkills}
-                style={{
-                  padding: '8px 20px',
-                  fontSize: '14px',
-                  backgroundColor: '#2196F3',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  opacity: 0.8
-                }}
-                onMouseOver={(e) => { e.currentTarget.style.opacity = '1'; }}
-                onMouseOut={(e) => { e.currentTarget.style.opacity = '0.8'; }}
-              >
-                Skills
-              </button>
-              <button
-                onClick={handleLogout}
-                style={{
-                  padding: '5px 15px',
-                  fontSize: '14px',
-                  backgroundColor: '#f44336',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  opacity: 0.8
-                }}
-                onMouseOver={(e) => { e.currentTarget.style.opacity = '1'; }}
-                onMouseOut={(e) => { e.currentTarget.style.opacity = '0.8'; }}
-              >
-                Logout
-              </button>
-            </>
-          )}
-        </div>
+        {/* Character Panel */}
+        {username && (
+          <CharacterPanel
+            username={username}
+            scores={sessionScores}
+            onLogout={handleLogout}
+            onRestart={() => generateNewDungeon()}
+            onSkills={handleOpenSkills}
+          />
+        )}
 
         <canvas
           ref={canvasRef}
@@ -1008,8 +1122,48 @@ export default function GameCanvas() {
               <div>Deine HP: <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>{playerHp}</span>/{PLAYER_MAX_HP}</div>
               <div>Gegner HP: <span style={{ color: '#FF4444', fontWeight: 'bold' }}>{enemyHp}</span>/{currentEnemyRef.current?.maxHp ?? 0}</div>
             </div>
-            <div style={{ textAlign: 'center', fontSize: '24px', color: '#FFD700', marginBottom: '20px' }}>
-              Zeit: <span>{combatTimer}</span>s
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ textAlign: 'center', fontSize: '24px', color: '#FFD700' }}>
+                Zeit: <span>{combatTimer}</span>s
+              </div>
+              {combatQuestion && (() => {
+                const elo = combatQuestion.elo;
+                let difficulty = 'Neu';
+                let diffColor = '#888';
+                let diffLevel = 5;
+
+                if (elo !== null) {
+                  diffLevel = 11 - elo;
+                  if (diffLevel <= 2) {
+                    difficulty = 'Sehr leicht';
+                    diffColor = '#4CAF50';
+                  } else if (diffLevel <= 4) {
+                    difficulty = 'Leicht';
+                    diffColor = '#8BC34A';
+                  } else if (diffLevel <= 6) {
+                    difficulty = 'Mittel';
+                    diffColor = '#FFC107';
+                  } else if (diffLevel <= 8) {
+                    difficulty = 'Schwer';
+                    diffColor = '#FF9800';
+                  } else {
+                    difficulty = 'Sehr schwer';
+                    diffColor = '#FF4444';
+                  }
+                }
+
+                return (
+                  <div style={{
+                    fontSize: '14px',
+                    padding: '6px 12px',
+                    backgroundColor: `${diffColor}20`,
+                    borderRadius: '6px',
+                    border: `2px solid ${diffColor}`
+                  }}>
+                    <span style={{ color: diffColor, fontWeight: 'bold' }}>{difficulty} ({diffLevel})</span>
+                  </div>
+                );
+              })()}
             </div>
             {combatQuestion && (
               <>
