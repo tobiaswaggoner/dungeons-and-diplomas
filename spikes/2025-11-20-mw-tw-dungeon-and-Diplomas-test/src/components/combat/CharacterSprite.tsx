@@ -1,5 +1,8 @@
 import { motion } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
+import { SpriteSheetLoader } from '../../lib/SpriteSheetLoader';
+import { DIRECTION, ANIMATION } from '../../lib/constants';
 
 interface CharacterSpriteProps {
   isPlayer: boolean;
@@ -8,58 +11,116 @@ interface CharacterSpriteProps {
 }
 
 const SpriteContainer = styled(motion.div)<{ $isPlayer: boolean }>`
-  width: 150px;
-  height: 200px;
+  width: 320px;
+  height: 320px;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   position: absolute;
-  bottom: 100px;
-  ${(props) => (props.$isPlayer ? 'left: 150px;' : 'right: 150px;')}
-  filter: drop-shadow(4px 4px 8px rgba(0, 0, 0, 0.5));
+  bottom: 30px;
+  ${(props) => (props.$isPlayer ? 'left: 80px;' : 'right: 80px;')}
+  filter: drop-shadow(6px 6px 12px rgba(0, 0, 0, 0.6));
 `;
 
-const StickFigure = styled.svg`
-  width: 140px;
-  height: 180px;
-`;
-
-const GoblinSprite = styled.svg`
-  width: 120px;
-  height: 140px;
+const SpriteCanvas = styled.canvas`
+  width: 300px;
+  height: 300px;
+  image-rendering: pixelated;
 `;
 
 export function CharacterSprite({ isPlayer, isAttacking, isHurt }: CharacterSpriteProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const spriteRef = useRef<SpriteSheetLoader | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const animationFrameRef = useRef<number>();
+
+  useEffect(() => {
+    const loadSprite = async () => {
+      const spriteName = isPlayer ? 'player' : 'goblin';
+      const sprite = new SpriteSheetLoader(spriteName);
+      await sprite.load();
+
+      // Set initial animation based on state
+      if (isAttacking) {
+        sprite.playAnimation(DIRECTION.RIGHT, ANIMATION.RUN);
+      } else if (isHurt) {
+        sprite.playAnimation(DIRECTION.DOWN, ANIMATION.HURT);
+      } else {
+        sprite.playAnimation(DIRECTION.DOWN, ANIMATION.IDLE);
+      }
+
+      spriteRef.current = sprite;
+      setLoaded(true);
+    };
+
+    loadSprite();
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [isPlayer]);
+
+  useEffect(() => {
+    if (!loaded || !spriteRef.current) return;
+
+    // Update animation based on state
+    if (isAttacking) {
+      spriteRef.current.playAnimation(DIRECTION.RIGHT, ANIMATION.RUN);
+    } else if (isHurt) {
+      spriteRef.current.playAnimation(DIRECTION.DOWN, ANIMATION.HURT);
+    } else {
+      spriteRef.current.playAnimation(DIRECTION.DOWN, ANIMATION.IDLE);
+    }
+  }, [isAttacking, isHurt, loaded]);
+
+  useEffect(() => {
+    if (!loaded || !spriteRef.current || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let lastTime = 0;
+
+    const animate = (timestamp: number) => {
+      const dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+
+      if (spriteRef.current) {
+        spriteRef.current.update(dt);
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw sprite centered
+        spriteRef.current.draw(ctx, 0, 0, canvas.width, canvas.height);
+      }
+
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [loaded]);
+
   if (isPlayer) {
     return (
       <SpriteContainer
         $isPlayer={isPlayer}
         animate={{
-          x: isAttacking ? 20 : 0,
+          x: isAttacking ? 30 : 0,
           rotate: isHurt ? [0, -5, 5, -5, 0] : 0,
         }}
         transition={{ duration: 0.3 }}
       >
-        <StickFigure viewBox="0 0 60 80" fill="none">
-          {/* Head */}
-          <circle cx="30" cy="15" r="10" fill="#ffcc99" stroke="#000" strokeWidth="2" />
-          {/* Eyes */}
-          <circle cx="26" cy="14" r="2" fill="#000" />
-          <circle cx="34" cy="14" r="2" fill="#000" />
-          {/* Smile */}
-          <path d="M 24 18 Q 30 20 36 18" stroke="#000" strokeWidth="1.5" fill="none" />
-          {/* Body */}
-          <line x1="30" y1="25" x2="30" y2="50" stroke="#000" strokeWidth="3" />
-          {/* Arms */}
-          <line x1="30" y1="30" x2="15" y2="40" stroke="#000" strokeWidth="3" />
-          <line x1="30" y1="30" x2="45" y2="35" stroke="#000" strokeWidth="3" />
-          {/* Sword in right hand */}
-          <rect x="43" y="28" width="3" height="15" fill="#888" stroke="#000" strokeWidth="1" />
-          <polygon points="44,25 45,28 43,28" fill="#ccc" />
-          {/* Legs */}
-          <line x1="30" y1="50" x2="20" y2="70" stroke="#000" strokeWidth="3" />
-          <line x1="30" y1="50" x2="40" y2="70" stroke="#000" strokeWidth="3" />
-        </StickFigure>
+        <SpriteCanvas ref={canvasRef} width={300} height={300} />
       </SpriteContainer>
     );
   }
@@ -69,33 +130,12 @@ export function CharacterSprite({ isPlayer, isAttacking, isHurt }: CharacterSpri
     <SpriteContainer
       $isPlayer={isPlayer}
       animate={{
-        x: isHurt ? [-10, 10, -10, 0] : 0,
+        x: isHurt ? [-15, 15, -15, 0] : 0,
         scale: isHurt ? [1, 0.95, 1] : 1,
       }}
       transition={{ duration: 0.4 }}
     >
-      <GoblinSprite viewBox="0 0 50 60" fill="none">
-        {/* Body */}
-        <ellipse cx="25" cy="40" rx="15" ry="12" fill="#33cc66" stroke="#000" strokeWidth="2" />
-        {/* Head */}
-        <circle cx="25" cy="20" r="12" fill="#33cc66" stroke="#000" strokeWidth="2" />
-        {/* Eyes */}
-        <circle cx="21" cy="18" r="3" fill="#fff" />
-        <circle cx="29" cy="18" r="3" fill="#fff" />
-        <circle cx="21" cy="18" r="1.5" fill="#000" />
-        <circle cx="29" cy="18" r="1.5" fill="#000" />
-        {/* Evil grin */}
-        <path d="M 18 24 Q 25 28 32 24" stroke="#000" strokeWidth="2" fill="none" />
-        {/* Ears */}
-        <ellipse cx="12" cy="18" rx="4" ry="6" fill="#33cc66" stroke="#000" strokeWidth="1" />
-        <ellipse cx="38" cy="18" rx="4" ry="6" fill="#33cc66" stroke="#000" strokeWidth="1" />
-        {/* Arms */}
-        <ellipse cx="10" cy="38" rx="4" ry="8" fill="#33cc66" stroke="#000" strokeWidth="1" />
-        <ellipse cx="40" cy="38" rx="4" ry="8" fill="#33cc66" stroke="#000" strokeWidth="1" />
-        {/* Legs */}
-        <ellipse cx="18" cy="52" rx="4" ry="8" fill="#33cc66" stroke="#000" strokeWidth="1" />
-        <ellipse cx="32" cy="52" rx="4" ry="8" fill="#33cc66" stroke="#000" strokeWidth="1" />
-      </GoblinSprite>
+      <SpriteCanvas ref={canvasRef} width={300} height={300} />
     </SpriteContainer>
   );
 }

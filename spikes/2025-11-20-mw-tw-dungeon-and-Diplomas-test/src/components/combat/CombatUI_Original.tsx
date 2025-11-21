@@ -1,6 +1,5 @@
 import styled from 'styled-components';
 import { theme } from '../../styles/theme';
-import { HPBar } from '../ui/HPBar';
 import type { Player as GamePlayer, Enemy as GameEnemy } from '../../types/game';
 
 interface CombatUIProps {
@@ -9,143 +8,99 @@ interface CombatUIProps {
 }
 
 const UIContainer = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  height: 200px;
-  background:
-    linear-gradient(180deg, rgba(42, 42, 42, 0.95) 0%, rgba(26, 26, 26, 0.98) 100%),
-    repeating-linear-gradient(
-      0deg,
-      #555 0px,
-      #555 20px,
-      #444 20px,
-      #444 21px
-    );
-  border-top: 4px solid ${theme.colors.border};
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  padding: ${theme.spacing.xl};
-  box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.5);
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
 `;
 
-const CharacterPanel = styled.div`
+const HPPanel = styled.div<{ $isPlayer: boolean }>`
+  position: absolute;
+  bottom: 280px;
+  ${(props) => (props.$isPlayer ? 'left: 50px;' : 'right: 50px;')}
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: ${theme.spacing.md};
-`;
-
-const Portrait = styled.div<{ $color: string }>`
-  width: 100px;
-  height: 100px;
-  border-radius: ${theme.borderRadius.round};
-  border: 4px solid ${(props) => props.$color};
-  background: radial-gradient(circle at 30% 30%, #7a7a7a, ${theme.colors.stone});
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 48px;
-  box-shadow:
-    0 0 20px ${(props) => props.$color}40,
-    inset -3px -3px 8px rgba(0, 0, 0, 0.4),
-    inset 3px 3px 8px rgba(255, 255, 255, 0.1);
-  position: relative;
-
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4px;
-    left: -4px;
-    right: -4px;
-    bottom: -4px;
-    border-radius: ${theme.borderRadius.round};
-    box-shadow: 0 0 30px ${(props) => props.$color}60;
-    pointer-events: none;
-  }
+  pointer-events: none;
 `;
 
 const NameLabel = styled.div`
-  font-size: ${theme.fontSize.xl};
+  font-size: 32px;
   font-weight: bold;
   color: ${theme.colors.textPrimary};
   text-transform: uppercase;
   font-family: monospace;
-  letter-spacing: 2px;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  letter-spacing: 3px;
+  text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.9);
+  margin-bottom: ${theme.spacing.sm};
 `;
 
-const HPContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: ${theme.spacing.xs};
+const HPBarContainer = styled.div`
+  width: 280px;
+  height: 45px;
+  background-color: rgba(20, 20, 20, 0.9);
+  border: 3px solid ${theme.colors.border};
+  border-radius: ${theme.borderRadius.md};
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
 `;
 
-// Player portrait icon
-const PlayerPortraitIcon = () => (
-  <svg width="60" height="60" viewBox="0 0 32 32" fill="none">
-    <circle cx="16" cy="16" r="14" fill="${theme.colors.playerGreen}" stroke="#000" strokeWidth="1.5" />
-    <circle cx="12" cy="14" r="2" fill="#000" />
-    <circle cx="20" cy="14" r="2" fill="#000" />
-    <path d="M 10 18 Q 16 22 22 18" stroke="#000" strokeWidth="2" fill="none" />
-  </svg>
-);
+const HPBarFill = styled.div<{ $color: string; $width: number }>`
+  height: 100%;
+  background: linear-gradient(180deg, ${(props) => props.$color} 0%, ${(props) => props.$color}dd 100%);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: ${(props) => props.$width}%;
+  transition: width 0.3s ease-out;
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.3);
+`;
 
-// Enemy portrait icon
-const EnemyPortraitIcon = ({ isBoss }: { isBoss: boolean }) => (
-  <svg width="60" height="60" viewBox="0 0 32 32" fill="none">
-    {isBoss ? (
-      // Boss icon - larger, scarier
-      <>
-        <ellipse cx="16" cy="20" rx="12" ry="10" fill="#cc3333" stroke="#000" strokeWidth="1.5" />
-        <circle cx="12" cy="18" r="2.5" fill="#ff0000" />
-        <circle cx="20" cy="18" r="2.5" fill="#ff0000" />
-        <circle cx="12" cy="18" r="1.2" fill="#000" />
-        <circle cx="20" cy="18" r="1.2" fill="#000" />
-        <path d="M 10 24 Q 16 27 22 24" stroke="#000" strokeWidth="2" fill="none" />
-        <polygon points="6,16 8,10 10,16" fill="#cc3333" stroke="#000" strokeWidth="1" />
-        <polygon points="26,16 24,10 22,16" fill="#cc3333" stroke="#000" strokeWidth="1" />
-      </>
-    ) : (
-      // Normal enemy - goblin
-      <>
-        <ellipse cx="16" cy="20" rx="10" ry="8" fill="#33cc66" stroke="#000" strokeWidth="1.5" />
-        <circle cx="12" cy="18" r="2" fill="#fff" />
-        <circle cx="20" cy="18" r="2" fill="#fff" />
-        <circle cx="12" cy="18" r="1" fill="#000" />
-        <circle cx="20" cy="18" r="1" fill="#000" />
-        <path d="M 12 22 Q 16 24 20 22" stroke="#000" strokeWidth="1.5" fill="none" />
-        <ellipse cx="10" cy="16" rx="3" ry="5" fill="#33cc66" stroke="#000" strokeWidth="1" />
-        <ellipse cx="22" cy="16" rx="3" ry="5" fill="#33cc66" stroke="#000" strokeWidth="1" />
-      </>
-    )}
-  </svg>
-);
+const HPBarText = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 22px;
+  font-weight: bold;
+  color: ${theme.colors.textPrimary};
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+  z-index: 1;
+  font-family: monospace;
+`;
+
+function CustomHPBar({ current, max, color }: { current: number; max: number; color: string }) {
+  const percentage = Math.max(0, Math.min(100, (current / max) * 100));
+
+  return (
+    <HPBarContainer>
+      <HPBarFill $color={color} $width={percentage} />
+      <HPBarText>
+        {current} / {max}
+      </HPBarText>
+    </HPBarContainer>
+  );
+}
 
 export function CombatUI({ player, enemy }: CombatUIProps) {
   return (
     <UIContainer>
-      {/* Player Panel */}
-      <CharacterPanel>
-        <Portrait $color={theme.colors.hpGreen}>
-          <PlayerPortraitIcon />
-        </Portrait>
+      {/* Player HP */}
+      <HPPanel $isPlayer={true}>
         <NameLabel>ICH</NameLabel>
-        <HPContainer>
-          <HPBar current={player.currentHp} max={player.maxHp} color={theme.colors.hpGreen} />
-        </HPContainer>
-      </CharacterPanel>
+        <CustomHPBar current={player.currentHp} max={player.maxHp} color={theme.colors.hpGreen} />
+      </HPPanel>
 
-      {/* Enemy Panel */}
-      <CharacterPanel>
-        <Portrait $color={theme.colors.hpRed}>
-          <EnemyPortraitIcon isBoss={enemy.isBoss} />
-        </Portrait>
+      {/* Enemy HP */}
+      <HPPanel $isPlayer={false}>
         <NameLabel>{enemy.name}</NameLabel>
-        <HPContainer>
-          <HPBar current={enemy.currentHp} max={enemy.maxHp} color={theme.colors.hpRed} />
-        </HPContainer>
-      </CharacterPanel>
+        <CustomHPBar current={enemy.currentHp} max={enemy.maxHp} color={theme.colors.hpRed} />
+      </HPPanel>
     </UIContainer>
   );
 }

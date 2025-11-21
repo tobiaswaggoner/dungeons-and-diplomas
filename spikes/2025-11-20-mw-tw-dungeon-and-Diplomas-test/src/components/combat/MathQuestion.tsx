@@ -15,37 +15,37 @@ const QuestionContainer = styled.div`
   left: 50%;
   transform: translate(-50%, -50%);
   background-color: rgba(42, 42, 42, 0.95);
-  border: 3px solid ${theme.colors.playerGreen};
-  border-radius: ${theme.borderRadius.md};
-  padding: ${theme.spacing.xl};
-  min-width: 400px;
-  box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+  border: 4px solid ${theme.colors.playerGreen};
+  border-radius: ${theme.borderRadius.lg};
+  padding: 40px;
+  min-width: 550px;
+  box-shadow: 0 0 40px rgba(0, 255, 0, 0.4);
   z-index: 10;
 `;
 
 const QuestionText = styled.div`
-  font-size: ${theme.fontSize.xl};
+  font-size: 48px;
   color: ${theme.colors.textPrimary};
   text-align: center;
-  margin-bottom: ${theme.spacing.lg};
+  margin-bottom: ${theme.spacing.xl};
   font-weight: bold;
   font-family: monospace;
 `;
 
 const InputContainer = styled.div`
   display: flex;
-  gap: ${theme.spacing.md};
+  gap: ${theme.spacing.lg};
   align-items: center;
   justify-content: center;
 `;
 
 const AnswerInput = styled.input`
-  width: 150px;
-  height: 50px;
-  font-size: ${theme.fontSize.lg};
+  width: 200px;
+  height: 70px;
+  font-size: 32px;
   text-align: center;
-  border: 2px solid ${theme.colors.border};
-  border-radius: ${theme.borderRadius.sm};
+  border: 3px solid ${theme.colors.border};
+  border-radius: ${theme.borderRadius.md};
   background-color: ${theme.colors.background};
   color: ${theme.colors.textPrimary};
   font-family: monospace;
@@ -54,25 +54,25 @@ const AnswerInput = styled.input`
   &:focus {
     outline: none;
     border-color: ${theme.colors.playerGreen};
-    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
   }
 `;
 
 const SubmitButton = styled.button`
-  height: 50px;
-  padding: 0 ${theme.spacing.lg};
-  font-size: ${theme.fontSize.md};
+  height: 70px;
+  padding: 0 32px;
+  font-size: 24px;
   font-weight: bold;
   background-color: ${theme.colors.playerGreen};
   color: #000;
   border: none;
-  border-radius: ${theme.borderRadius.sm};
+  border-radius: ${theme.borderRadius.md};
   cursor: pointer;
   transition: all 0.2s;
 
   &:hover:not(:disabled) {
     transform: scale(1.05);
-    box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
   }
 
   &:disabled {
@@ -82,10 +82,10 @@ const SubmitButton = styled.button`
 `;
 
 const Hint = styled.div`
-  font-size: ${theme.fontSize.sm};
+  font-size: 18px;
   color: ${theme.colors.textSecondary};
   text-align: center;
-  margin-top: ${theme.spacing.md};
+  margin-top: ${theme.spacing.lg};
 `;
 
 export function MathQuestion({ question, onAnswer, disabled }: MathQuestionProps) {

@@ -31,21 +31,21 @@ const VictoryOverlay = styled.div`
 `;
 
 const VictoryText = styled.div`
-  font-size: 48px;
+  font-size: 72px;
   font-weight: bold;
   color: ${theme.colors.playerGreen};
-  margin-bottom: ${theme.spacing.xl};
-  text-shadow: 0 0 20px rgba(0, 255, 0, 0.8);
+  margin-bottom: 40px;
+  text-shadow: 0 0 30px rgba(0, 255, 0, 0.9);
 `;
 
 const DefeatText = styled(VictoryText)`
   color: ${theme.colors.hpRed};
-  text-shadow: 0 0 20px rgba(255, 0, 0, 0.8);
+  text-shadow: 0 0 30px rgba(255, 0, 0, 0.9);
 `;
 
 const ContinueButton = styled.button`
-  padding: ${theme.spacing.md} ${theme.spacing.xl};
-  font-size: ${theme.fontSize.lg};
+  padding: 20px 50px;
+  font-size: 28px;
   font-weight: bold;
   background-color: ${theme.colors.playerGreen};
   color: #000;
@@ -56,30 +56,30 @@ const ContinueButton = styled.button`
 
   &:hover {
     transform: scale(1.1);
-    box-shadow: 0 0 20px rgba(0, 255, 0, 0.8);
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.9);
   }
 `;
 
 const RewardText = styled.div`
-  font-size: ${theme.fontSize.lg};
+  font-size: 32px;
   color: ${theme.colors.gold};
-  margin-bottom: ${theme.spacing.lg};
+  margin-bottom: 30px;
 `;
 
 const ItemList = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${theme.spacing.sm};
-  margin-bottom: ${theme.spacing.lg};
+  gap: ${theme.spacing.md};
+  margin-bottom: 30px;
 `;
 
 const ItemReward = styled.div`
-  font-size: ${theme.fontSize.md};
+  font-size: 22px;
   color: ${theme.colors.playerGreen};
   background-color: rgba(0, 255, 0, 0.1);
-  padding: ${theme.spacing.sm} ${theme.spacing.md};
-  border-radius: ${theme.borderRadius.sm};
-  border: 1px solid ${theme.colors.playerGreen};
+  padding: ${theme.spacing.md} ${theme.spacing.lg};
+  border-radius: ${theme.borderRadius.md};
+  border: 2px solid ${theme.colors.playerGreen};
 `;
 
 interface CombatSceneProps {
