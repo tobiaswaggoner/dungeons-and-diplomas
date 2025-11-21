@@ -2,14 +2,17 @@ import { DUNGEON_WIDTH, DUNGEON_HEIGHT, TILE, FLOOR_VARIANTS, WALL_VARIANTS } fr
 import type { TileType, TileVariant, Room, TileCoord } from '../constants';
 import { BSPNode } from './BSPNode';
 import { UnionFind } from './UnionFind';
+import { getDecorationRng, getStructureRng } from './DungeonRNG';
 
 // Weighted random selection function
 export function getWeightedRandomVariant(variants: { x: number; y: number; weight: number }[]): TileCoord {
+  const rng = getDecorationRng();
+
   // Calculate total weight
   const totalWeight = variants.reduce((sum, variant) => sum + variant.weight, 0);
 
   // Generate random number between 0 and totalWeight
-  let random = Math.random() * totalWeight;
+  let random = rng.next() * totalWeight;
 
   // Select variant based on weight
   for (let variant of variants) {
@@ -169,8 +172,9 @@ export function connectRooms(dungeon: TileType[][], roomMap: number[][], rooms: 
   }
 
   // 2. Shuffle connections to ensure random dungeon layout
+  const rng = getStructureRng();
   for (let i = possibleConnections.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = rng.nextIntMax(i + 1);
     [possibleConnections[i], possibleConnections[j]] = [possibleConnections[j], possibleConnections[i]];
   }
 
@@ -195,7 +199,7 @@ export function connectRooms(dungeon: TileType[][], roomMap: number[][], rooms: 
     if (dungeon[conn.y][conn.x] === TILE.DOOR) continue;
 
     // If rooms are already connected (which they are now), maybe add a shortcut
-    if (Math.random() < 0.02) { // 2% chance for extra doors
+    if (rng.nextBoolean(0.02)) { // 2% chance for extra doors
       finalDoors.push(conn);
       // Add neighbors if not already there
       if (!rooms[conn.roomA].neighbors.includes(conn.roomB)) {

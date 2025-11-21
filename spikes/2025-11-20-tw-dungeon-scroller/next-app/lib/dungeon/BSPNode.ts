@@ -1,5 +1,6 @@
 import { MIN_ROOM_SIZE, MAX_ROOM_SIZE, TILE, DUNGEON_HEIGHT, DUNGEON_WIDTH } from '../constants';
 import type { TileType, Room } from '../constants';
+import { getStructureRng } from './DungeonRNG';
 
 export class BSPNode {
   x: number;
@@ -26,7 +27,8 @@ export class BSPNode {
     }
 
     // Randomly stop splitting to create varied room sizes
-    if (this.width <= MAX_ROOM_SIZE && this.height <= MAX_ROOM_SIZE && Math.random() < 0.25) {
+    const rng = getStructureRng();
+    if (this.width <= MAX_ROOM_SIZE && this.height <= MAX_ROOM_SIZE && rng.nextBoolean(0.25)) {
       return;
     }
 
@@ -41,13 +43,13 @@ export class BSPNode {
     } else if (this.width > this.height * 1.25) {
       splitHorizontally = false;
     } else {
-      splitHorizontally = Math.random() > 0.5;
+      splitHorizontally = rng.nextBoolean(0.5);
     }
 
     if (splitHorizontally) {
       const minSplit = MIN_ROOM_SIZE;
       const maxSplit = this.height - MIN_ROOM_SIZE - 1;
-      const splitPos = Math.floor(Math.random() * (maxSplit - minSplit) + minSplit);
+      const splitPos = rng.nextInt(minSplit, maxSplit + 1);
 
       this.splitDirection = 'horizontal';
       this.splitPosition = splitPos;
@@ -57,7 +59,7 @@ export class BSPNode {
     } else {
       const minSplit = MIN_ROOM_SIZE;
       const maxSplit = this.width - MIN_ROOM_SIZE - 1;
-      const splitPos = Math.floor(Math.random() * (maxSplit - minSplit) + minSplit);
+      const splitPos = rng.nextInt(minSplit, maxSplit + 1);
 
       this.splitDirection = 'vertical';
       this.splitPosition = splitPos;
@@ -77,7 +79,8 @@ export class BSPNode {
       this.roomId = rooms.length;
 
       // Assign room type with weighted random selection
-      const typeRoll = Math.random() * 10;
+      const rng = getStructureRng();
+      const typeRoll = rng.next() * 10;
       let roomType: 'empty' | 'treasure' | 'combat';
       if (typeRoll < 2) {
         roomType = 'treasure';

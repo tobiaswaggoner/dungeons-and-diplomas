@@ -16,6 +16,7 @@ import {
   calculateSpatialNeighbors,
   addWalls
 } from '../dungeon/generation';
+import { initializeDungeonRNG, generateRandomSeed, getSpawnRng } from '../dungeon/DungeonRNG';
 import { SpriteSheetLoader } from '../SpriteSheetLoader';
 import { Enemy } from '../Enemy';
 import {
@@ -51,7 +52,23 @@ export class DungeonManager {
     await this.generateNewDungeon(availableSubjects);
   }
 
-  async generateNewDungeon(availableSubjects: string[], userId: number | null = null) {
+  async generateNewDungeon(
+    availableSubjects: string[],
+    userId: number | null = null,
+    structureSeed?: number,
+    decorationSeed?: number,
+    spawnSeed?: number
+  ) {
+    // Initialize RNG with provided seeds or generate random ones
+    const finalStructureSeed = structureSeed ?? generateRandomSeed();
+    const finalDecorationSeed = decorationSeed ?? generateRandomSeed();
+    const finalSpawnSeed = spawnSeed ?? generateRandomSeed();
+
+    initializeDungeonRNG(finalStructureSeed, finalDecorationSeed, finalSpawnSeed);
+
+    // Log seeds for debugging/reproduction
+    console.log(`Dungeon Seeds - Structure: ${finalStructureSeed}, Decoration: ${finalDecorationSeed}, Spawn: ${finalSpawnSeed}`);
+
     this.dungeon = createEmptyDungeon();
     this.tileVariants = generateTileVariants();
 
@@ -101,7 +118,8 @@ export class DungeonManager {
       if (roomFloorTiles.length === 0) continue;
 
       // Pick random position in room for treasure
-      const treasurePos = roomFloorTiles[Math.floor(Math.random() * roomFloorTiles.length)];
+      const rng = getSpawnRng();
+      const treasurePos = roomFloorTiles[rng.nextIntMax(roomFloorTiles.length)];
       this.treasures.add(`${treasurePos.x},${treasurePos.y}`);
     }
   }
@@ -118,7 +136,8 @@ export class DungeonManager {
     }
 
     if (validSpawnPoints.length > 0) {
-      const spawnPoint = validSpawnPoints[Math.floor(Math.random() * validSpawnPoints.length)];
+      const rng = getSpawnRng();
+      const spawnPoint = validSpawnPoints[rng.nextIntMax(validSpawnPoints.length)];
       this.player.x = spawnPoint.x * this.tileSize;
       this.player.y = spawnPoint.y * this.tileSize;
 
@@ -201,6 +220,8 @@ export class DungeonManager {
       let enemyCount = 0;
       let levelGenerator: (index: number) => number = () => 1; // Default level generator
 
+      const spawnRng = getSpawnRng();
+
       switch (room.type) {
         case 'treasure':
           // Treasure rooms: No enemies
@@ -209,13 +230,13 @@ export class DungeonManager {
 
         case 'combat':
           // Combat rooms: 1-3 enemies, at least one level 8+
-          enemyCount = Math.floor(Math.random() * 3) + 1; // 1-3
+          enemyCount = spawnRng.nextInt(1, 4); // 1-3
           levelGenerator = (index: number) => {
             // First enemy is guaranteed level 8+
             if (index === 0) {
-              return generateCombatRoomLevel(true);
+              return generateCombatRoomLevel(true, spawnRng);
             } else {
-              return generateCombatRoomLevel(false);
+              return generateCombatRoomLevel(false, spawnRng);
             }
           };
           break;
@@ -226,9 +247,9 @@ export class DungeonManager {
           enemyCount = 1;
           levelGenerator = () => {
             // Select subject first to get appropriate ELO
-            const subject = selectWeightedSubject(subjectWeights);
+            const subject = selectWeightedSubject(subjectWeights, spawnRng);
             const playerElo = subjectElos[subject] || 5;
-            return generateNormalRoomLevel(playerElo);
+            return generateNormalRoomLevel(playerElo, spawnRng);
           };
           break;
       }
@@ -236,10 +257,10 @@ export class DungeonManager {
       // Spawn enemies
       for (let enemyIndex = 0; enemyIndex < enemyCount; enemyIndex++) {
         // Select random spawn position
-        const spawnPos = roomFloorTiles[Math.floor(Math.random() * roomFloorTiles.length)];
+        const spawnPos = roomFloorTiles[spawnRng.nextIntMax(roomFloorTiles.length)];
 
         // Select subject (weighted by inverse ELO)
-        const subject = selectWeightedSubject(subjectWeights);
+        const subject = selectWeightedSubject(subjectWeights, spawnRng);
 
         // Generate level based on room type
         const level = levelGenerator(enemyIndex);

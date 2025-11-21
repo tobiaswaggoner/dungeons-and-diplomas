@@ -5,18 +5,21 @@
  * using normal distribution and weighted random selection.
  */
 
+import type { SeededRandom } from '../dungeon/SeededRandom';
+
 /**
  * Generate a normally distributed random number around a mean with given standard deviation
  * Uses Box-Muller transform
  *
  * @param mean Center of the distribution
  * @param stdDev Standard deviation (spread)
+ * @param rng Optional seeded random generator (for reproducible dungeons)
  * @returns Random number from normal distribution
  */
-function randomNormal(mean: number, stdDev: number): number {
+function randomNormal(mean: number, stdDev: number, rng?: SeededRandom): number {
   // Box-Muller transform
-  const u1 = Math.random();
-  const u2 = Math.random();
+  const u1 = rng ? rng.next() : Math.random();
+  const u2 = rng ? rng.next() : Math.random();
   const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
   return z0 * stdDev + mean;
 }
@@ -26,9 +29,10 @@ function randomNormal(mean: number, stdDev: number): number {
  * Level 1-6 based on player's ELO in the subject
  *
  * @param playerElo Player's ELO in this subject (1-10)
+ * @param rng Optional seeded random generator (for reproducible dungeons)
  * @returns Enemy level (1-6), clamped and rounded
  */
-export function generateNormalRoomLevel(playerElo: number): number {
+export function generateNormalRoomLevel(playerElo: number, rng?: SeededRandom): number {
   // Map player ELO (1-10) to target level range (1-6)
   // Player ELO 1 → target ~1-2
   // Player ELO 5 → target ~3-4
@@ -39,7 +43,7 @@ export function generateNormalRoomLevel(playerElo: number): number {
   const stdDev = 1.0 + (playerElo / 10) * 0.5;
 
   // Generate level with normal distribution
-  let level = Math.round(randomNormal(targetLevel, stdDev));
+  let level = Math.round(randomNormal(targetLevel, stdDev, rng));
 
   // Clamp to 1-6 range
   level = Math.max(1, Math.min(6, level));
@@ -52,9 +56,10 @@ export function generateNormalRoomLevel(playerElo: number): number {
  * High levels (6-10) with strong bias toward 8+
  *
  * @param guaranteeHard If true, guarantee level 8+
+ * @param rng Optional seeded random generator (for reproducible dungeons)
  * @returns Enemy level (6-10)
  */
-export function generateCombatRoomLevel(guaranteeHard: boolean = false): number {
+export function generateCombatRoomLevel(guaranteeHard: boolean = false, rng?: SeededRandom): number {
   if (guaranteeHard) {
     // Guaranteed hard enemy: Level 8-10 with bias toward 8
     const weights = [
@@ -64,7 +69,7 @@ export function generateCombatRoomLevel(guaranteeHard: boolean = false): number 
     ];
 
     const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
-    let random = Math.random() * totalWeight;
+    let random = (rng ? rng.next() : Math.random()) * totalWeight;
 
     for (const w of weights) {
       random -= w.weight;
@@ -73,7 +78,7 @@ export function generateCombatRoomLevel(guaranteeHard: boolean = false): number 
     return 8; // Fallback
   } else {
     // Non-guaranteed enemy: Level 6-10 with normal distribution around 8
-    let level = Math.round(randomNormal(8, 1.5));
+    let level = Math.round(randomNormal(8, 1.5, rng));
     level = Math.max(6, Math.min(10, level));
     return level;
   }
@@ -114,13 +119,14 @@ export function calculateSubjectWeights(subjectElos: { [key: string]: number }):
  * Select a subject based on weighted probabilities
  *
  * @param subjectWeights Map of subject key to probability (0-1)
+ * @param rng Optional seeded random generator (for reproducible dungeons)
  * @returns Selected subject key
  */
-export function selectWeightedSubject(subjectWeights: { [key: string]: number }): string {
+export function selectWeightedSubject(subjectWeights: { [key: string]: number }, rng?: SeededRandom): string {
   const subjects = Object.keys(subjectWeights);
   if (subjects.length === 0) return 'mathe'; // Fallback
 
-  let random = Math.random();
+  let random = rng ? rng.next() : Math.random();
 
   for (const subject of subjects) {
     random -= subjectWeights[subject];
