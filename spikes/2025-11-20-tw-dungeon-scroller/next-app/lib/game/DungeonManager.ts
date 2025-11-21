@@ -13,6 +13,7 @@ import {
   generateTileVariants,
   generateRooms,
   connectRooms,
+  calculateSpatialNeighbors,
   addWalls
 } from '../dungeon/generation';
 import { SpriteSheetLoader } from '../SpriteSheetLoader';
@@ -65,6 +66,7 @@ export class DungeonManager {
 
     this.rooms = generateRooms(this.dungeon, this.roomMap);
     connectRooms(this.dungeon, this.roomMap, this.rooms);
+    calculateSpatialNeighbors(this.dungeon, this.roomMap, this.rooms);
     addWalls(this.dungeon);
 
     this.spawnPlayer();
@@ -197,7 +199,7 @@ export class DungeonManager {
 
       // Determine enemy count and level generation based on room type
       let enemyCount = 0;
-      let levelGenerator: (index: number) => number;
+      let levelGenerator: (index: number) => number = () => 1; // Default level generator
 
       switch (room.type) {
         case 'treasure':
