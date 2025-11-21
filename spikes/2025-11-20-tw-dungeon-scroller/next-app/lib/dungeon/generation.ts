@@ -1,5 +1,5 @@
-import { DUNGEON_WIDTH, DUNGEON_HEIGHT, TILE, FLOOR_VARIANTS, WALL_VARIANTS } from '../constants';
-import type { TileType, TileVariant, Room, TileCoord } from '../constants';
+import { DUNGEON_WIDTH, DUNGEON_HEIGHT, TILE, FLOOR_VARIANTS, WALL_VARIANTS, DEFAULT_DUNGEON_CONFIG } from '../constants';
+import type { TileType, TileVariant, Room, TileCoord, DungeonConfig } from '../constants';
 import { BSPNode } from './BSPNode';
 import { UnionFind } from './UnionFind';
 import { getDecorationRng, getStructureRng } from './DungeonRNG';
@@ -26,22 +26,28 @@ export function getWeightedRandomVariant(variants: { x: number; y: number; weigh
   return { x: variants[0].x, y: variants[0].y };
 }
 
-export function createEmptyDungeon(): TileType[][] {
+export function createEmptyDungeon(config?: Partial<DungeonConfig>): TileType[][] {
+  const width = config?.width ?? DUNGEON_WIDTH;
+  const height = config?.height ?? DUNGEON_HEIGHT;
+
   const grid: TileType[][] = [];
-  for (let y = 0; y < DUNGEON_HEIGHT; y++) {
+  for (let y = 0; y < height; y++) {
     grid[y] = [];
-    for (let x = 0; x < DUNGEON_WIDTH; x++) {
+    for (let x = 0; x < width; x++) {
       grid[y][x] = TILE.EMPTY;
     }
   }
   return grid;
 }
 
-export function generateTileVariants(): TileVariant[][] {
+export function generateTileVariants(config?: Partial<DungeonConfig>): TileVariant[][] {
+  const width = config?.width ?? DUNGEON_WIDTH;
+  const height = config?.height ?? DUNGEON_HEIGHT;
+
   const tileVariants: TileVariant[][] = [];
-  for (let y = 0; y < DUNGEON_HEIGHT; y++) {
+  for (let y = 0; y < height; y++) {
     tileVariants[y] = [];
-    for (let x = 0; x < DUNGEON_WIDTH; x++) {
+    for (let x = 0; x < width; x++) {
       tileVariants[y][x] = {
         floor: getWeightedRandomVariant(FLOOR_VARIANTS),
         wall: getWeightedRandomVariant(WALL_VARIANTS)
@@ -51,19 +57,22 @@ export function generateTileVariants(): TileVariant[][] {
   return tileVariants;
 }
 
-export function generateRooms(dungeon: TileType[][], roomMap: number[][]): Room[] {
+export function generateRooms(dungeon: TileType[][], roomMap: number[][], config?: Partial<DungeonConfig>): Room[] {
+  const width = config?.width ?? dungeon[0]?.length ?? DUNGEON_WIDTH;
+  const height = config?.height ?? dungeon.length ?? DUNGEON_HEIGHT;
+
   const rooms: Room[] = [];
 
   // Initialize roomMap
-  for (let y = 0; y < DUNGEON_HEIGHT; y++) {
-    for (let x = 0; x < DUNGEON_WIDTH; x++) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
       dungeon[y][x] = TILE.FLOOR;
       roomMap[y][x] = -1;
     }
   }
 
   // Create BSP tree
-  const root = new BSPNode(0, 0, DUNGEON_WIDTH, DUNGEON_HEIGHT);
+  const root = new BSPNode(0, 0, width, height, config);
   root.split();
   root.fillRooms(dungeon, roomMap, rooms);
 
@@ -87,16 +96,19 @@ interface Connection {
  * Calculate all spatial neighbors for each room (rooms that share a wall)
  * This includes ALL adjacent rooms, not just those connected by doors
  */
-export function calculateSpatialNeighbors(dungeon: TileType[][], roomMap: number[][], rooms: Room[]) {
+export function calculateSpatialNeighbors(dungeon: TileType[][], roomMap: number[][], rooms: Room[], config?: Partial<DungeonConfig>) {
+  const width = config?.width ?? dungeon[0]?.length ?? DUNGEON_WIDTH;
+  const height = config?.height ?? dungeon.length ?? DUNGEON_HEIGHT;
+
   // Create a Set for each room to store unique neighbor IDs
   const spatialNeighbors: Set<number>[] = rooms.map(() => new Set<number>());
 
   // Scan all walls to find adjacent rooms
-  for (let y = 0; y < DUNGEON_HEIGHT; y++) {
-    for (let x = 0; x < DUNGEON_WIDTH; x++) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
       if (dungeon[y][x] === TILE.WALL) {
         // Check vertical neighbors (Room Above <-> Room Below)
-        if (y > 0 && y < DUNGEON_HEIGHT - 1) {
+        if (y > 0 && y < height - 1) {
           const roomAbove = roomMap[y - 1][x];
           const roomBelow = roomMap[y + 1][x];
 
@@ -107,7 +119,7 @@ export function calculateSpatialNeighbors(dungeon: TileType[][], roomMap: number
         }
 
         // Check horizontal neighbors (Room Left <-> Room Right)
-        if (x > 0 && x < DUNGEON_WIDTH - 1) {
+        if (x > 0 && x < width - 1) {
           const roomLeft = roomMap[y][x - 1];
           const roomRight = roomMap[y][x + 1];
 
@@ -126,16 +138,19 @@ export function calculateSpatialNeighbors(dungeon: TileType[][], roomMap: number
   }
 }
 
-export function connectRooms(dungeon: TileType[][], roomMap: number[][], rooms: Room[]) {
+export function connectRooms(dungeon: TileType[][], roomMap: number[][], rooms: Room[], config?: Partial<DungeonConfig>) {
+  const width = config?.width ?? dungeon[0]?.length ?? DUNGEON_WIDTH;
+  const height = config?.height ?? dungeon.length ?? DUNGEON_HEIGHT;
+
   // 1. Identify all possible connections (adjacent rooms)
   const possibleConnections: Connection[] = [];
 
   // Scan horizontal walls
-  for (let y = 0; y < DUNGEON_HEIGHT; y++) {
-    for (let x = 0; x < DUNGEON_WIDTH; x++) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
       if (dungeon[y][x] === TILE.WALL) {
         // Check vertical neighbors (Room Above <-> Room Below)
-        if (y > 0 && y < DUNGEON_HEIGHT - 1) {
+        if (y > 0 && y < height - 1) {
           const roomAbove = roomMap[y - 1][x];
           const roomBelow = roomMap[y + 1][x];
 
@@ -152,7 +167,7 @@ export function connectRooms(dungeon: TileType[][], roomMap: number[][], rooms: 
         }
 
         // Check horizontal neighbors (Room Left <-> Room Right)
-        if (x > 0 && x < DUNGEON_WIDTH - 1) {
+        if (x > 0 && x < width - 1) {
           const roomLeft = roomMap[y][x - 1];
           const roomRight = roomMap[y][x + 1];
 
@@ -216,15 +231,18 @@ export function connectRooms(dungeon: TileType[][], roomMap: number[][], rooms: 
   }
 }
 
-export function addWalls(dungeon: TileType[][]) {
+export function addWalls(dungeon: TileType[][], config?: Partial<DungeonConfig>) {
+  const width = config?.width ?? dungeon[0]?.length ?? DUNGEON_WIDTH;
+  const height = config?.height ?? dungeon.length ?? DUNGEON_HEIGHT;
+
   // Walls are already created by the room generation algorithm
   // This function now only adds outer boundary walls if needed
-  for (let x = 0; x < DUNGEON_WIDTH; x++) {
+  for (let x = 0; x < width; x++) {
     if (dungeon[0][x] === TILE.EMPTY) dungeon[0][x] = TILE.WALL;
-    if (dungeon[DUNGEON_HEIGHT - 1][x] === TILE.EMPTY) dungeon[DUNGEON_HEIGHT - 1][x] = TILE.WALL;
+    if (dungeon[height - 1][x] === TILE.EMPTY) dungeon[height - 1][x] = TILE.WALL;
   }
-  for (let y = 0; y < DUNGEON_HEIGHT; y++) {
+  for (let y = 0; y < height; y++) {
     if (dungeon[y][0] === TILE.EMPTY) dungeon[y][0] = TILE.WALL;
-    if (dungeon[y][DUNGEON_WIDTH - 1] === TILE.EMPTY) dungeon[y][DUNGEON_WIDTH - 1] = TILE.WALL;
+    if (dungeon[y][width - 1] === TILE.EMPTY) dungeon[y][width - 1] = TILE.WALL;
   }
 }

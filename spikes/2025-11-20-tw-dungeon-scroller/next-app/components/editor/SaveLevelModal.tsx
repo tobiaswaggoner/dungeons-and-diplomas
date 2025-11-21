@@ -1,29 +1,43 @@
 import { useState } from 'react';
+import { DUNGEON_ALGORITHM } from '@/lib/constants';
+import type { DungeonAlgorithm } from '@/lib/constants';
 
 interface SaveLevelModalProps {
   structureSeed: number;
   decorationSeed: number;
   spawnSeed: number;
+  width: number;
+  height: number;
+  algorithm: DungeonAlgorithm;
   onClose: () => void;
-  onSave: () => void;
+  onSave: (success: boolean, message: string) => void;
 }
+
+const ALGORITHM_NAMES: Record<DungeonAlgorithm, string> = {
+  [DUNGEON_ALGORITHM.BSP]: 'BSP'
+};
 
 export default function SaveLevelModal({
   structureSeed,
   decorationSeed,
   spawnSeed,
+  width,
+  height,
+  algorithm,
   onClose,
   onSave
 }: SaveLevelModalProps) {
   const [levelName, setLevelName] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [validationError, setValidationError] = useState('');
 
   const handleSave = async () => {
     if (!levelName.trim()) {
-      alert('Please enter a level name');
+      setValidationError('Please enter a level name');
       return;
     }
+    setValidationError('');
 
     setSaving(true);
 
@@ -36,19 +50,21 @@ export default function SaveLevelModal({
           structure_seed: structureSeed,
           decoration_seed: decorationSeed,
           spawn_seed: spawnSeed,
+          width: width,
+          height: height,
+          algorithm: algorithm,
           notes: notes
         })
       });
 
       if (response.ok) {
-        alert('Level saved successfully!');
-        onSave();
+        onSave(true, 'Level saved successfully!');
       } else {
-        alert('Failed to save level');
+        onSave(false, 'Failed to save level');
       }
     } catch (error) {
       console.error('Error saving level:', error);
-      alert('Error saving level');
+      onSave(false, 'Error saving level');
     } finally {
       setSaving(false);
     }
@@ -85,18 +101,27 @@ export default function SaveLevelModal({
           <input
             type="text"
             value={levelName}
-            onChange={(e) => setLevelName(e.target.value)}
+            onChange={(e) => {
+              setLevelName(e.target.value);
+              if (validationError) setValidationError('');
+            }}
             placeholder="My Awesome Dungeon"
             style={{
               width: '100%',
               padding: '10px',
               backgroundColor: '#2a2a2a',
-              border: '1px solid #4CAF50',
+              border: `1px solid ${validationError ? '#f44336' : '#4CAF50'}`,
               borderRadius: '4px',
               color: 'white',
-              fontSize: '14px'
+              fontSize: '14px',
+              boxSizing: 'border-box'
             }}
           />
+          {validationError && (
+            <div style={{ color: '#f44336', fontSize: '12px', marginTop: '5px' }}>
+              {validationError}
+            </div>
+          )}
         </div>
 
         <div style={{ marginBottom: '15px' }}>
@@ -132,6 +157,10 @@ export default function SaveLevelModal({
           <div>Structure Seed: {structureSeed}</div>
           <div>Decoration Seed: {decorationSeed}</div>
           <div>Spawn Seed: {spawnSeed}</div>
+          <div style={{ marginTop: '10px', borderTop: '1px solid #444', paddingTop: '10px' }}>
+            <div>Size: {width} x {height}</div>
+            <div>Algorithm: {ALGORITHM_NAMES[algorithm] || `Unknown (${algorithm})`}</div>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>

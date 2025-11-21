@@ -1,8 +1,37 @@
-// Game constants
+// Game constants (defaults)
 export const DUNGEON_WIDTH = 100;
 export const DUNGEON_HEIGHT = 100;
 export const MIN_ROOM_SIZE = 4;
 export const MAX_ROOM_SIZE = 8;
+
+// Dungeon generation algorithms
+export const DUNGEON_ALGORITHM = {
+  BSP: 1,           // Binary Space Partitioning (current implementation)
+  // Future algorithms:
+  // CELLULAR: 2,   // Cellular Automata
+  // DRUNKARD: 3,   // Drunkard's Walk
+  // ROOM_PLACEMENT: 4, // Random room placement with corridors
+} as const;
+
+export type DungeonAlgorithm = typeof DUNGEON_ALGORITHM[keyof typeof DUNGEON_ALGORITHM];
+
+// Configuration for dungeon generation
+export interface DungeonConfig {
+  width: number;
+  height: number;
+  algorithm: DungeonAlgorithm;
+  minRoomSize?: number;
+  maxRoomSize?: number;
+}
+
+// Default dungeon configuration
+export const DEFAULT_DUNGEON_CONFIG: DungeonConfig = {
+  width: DUNGEON_WIDTH,
+  height: DUNGEON_HEIGHT,
+  algorithm: DUNGEON_ALGORITHM.BSP,
+  minRoomSize: MIN_ROOM_SIZE,
+  maxRoomSize: MAX_ROOM_SIZE,
+};
 
 // Keyboard state interface
 export interface KeyboardState {

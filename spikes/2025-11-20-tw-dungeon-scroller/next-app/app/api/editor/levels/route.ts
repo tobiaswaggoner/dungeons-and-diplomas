@@ -31,6 +31,9 @@ export async function POST(request: Request) {
       structure_seed: body.structure_seed,
       decoration_seed: body.decoration_seed,
       spawn_seed: body.spawn_seed,
+      width: body.width ?? 100,
+      height: body.height ?? 100,
+      algorithm: body.algorithm ?? 1,
       created_by: body.created_by,
       notes: body.notes
     });

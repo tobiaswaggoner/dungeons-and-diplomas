@@ -4,9 +4,10 @@ import {
   TILE,
   DIRECTION,
   ANIMATION,
-  PLAYER_MAX_HP
+  PLAYER_MAX_HP,
+  DEFAULT_DUNGEON_CONFIG
 } from '../constants';
-import type { TileType, TileVariant, Room } from '../constants';
+import type { TileType, TileVariant, Room, DungeonConfig } from '../constants';
 import type { Player } from '../Enemy';
 import {
   createEmptyDungeon,
@@ -36,9 +37,18 @@ export class DungeonManager {
   public playerSprite: SpriteSheetLoader | null = null;
   public tileSize: number = 64;
   public treasures: Set<string> = new Set(); // Store treasure positions as "x,y" strings
+  public config: DungeonConfig = { ...DEFAULT_DUNGEON_CONFIG };
 
   constructor(player: Player) {
     this.player = player;
+  }
+
+  get dungeonWidth(): number {
+    return this.config.width;
+  }
+
+  get dungeonHeight(): number {
+    return this.config.height;
   }
 
   async initialize(availableSubjects: string[]) {
@@ -57,8 +67,15 @@ export class DungeonManager {
     userId: number | null = null,
     structureSeed?: number,
     decorationSeed?: number,
-    spawnSeed?: number
+    spawnSeed?: number,
+    dungeonConfig?: Partial<DungeonConfig>
   ) {
+    // Update config with provided values
+    this.config = {
+      ...DEFAULT_DUNGEON_CONFIG,
+      ...dungeonConfig
+    };
+
     // Initialize RNG with provided seeds or generate random ones
     const finalStructureSeed = structureSeed ?? generateRandomSeed();
     const finalDecorationSeed = decorationSeed ?? generateRandomSeed();
@@ -68,23 +85,24 @@ export class DungeonManager {
 
     // Log seeds for debugging/reproduction
     console.log(`Dungeon Seeds - Structure: ${finalStructureSeed}, Decoration: ${finalDecorationSeed}, Spawn: ${finalSpawnSeed}`);
+    console.log(`Dungeon Config - Width: ${this.config.width}, Height: ${this.config.height}, Algorithm: ${this.config.algorithm}`);
 
-    this.dungeon = createEmptyDungeon();
-    this.tileVariants = generateTileVariants();
+    this.dungeon = createEmptyDungeon(this.config);
+    this.tileVariants = generateTileVariants(this.config);
 
     // Initialize roomMap
     this.roomMap = [];
-    for (let y = 0; y < DUNGEON_HEIGHT; y++) {
+    for (let y = 0; y < this.dungeonHeight; y++) {
       this.roomMap[y] = [];
-      for (let x = 0; x < DUNGEON_WIDTH; x++) {
+      for (let x = 0; x < this.dungeonWidth; x++) {
         this.roomMap[y][x] = -1;
       }
     }
 
-    this.rooms = generateRooms(this.dungeon, this.roomMap);
-    connectRooms(this.dungeon, this.roomMap, this.rooms);
-    calculateSpatialNeighbors(this.dungeon, this.roomMap, this.rooms);
-    addWalls(this.dungeon);
+    this.rooms = generateRooms(this.dungeon, this.roomMap, this.config);
+    connectRooms(this.dungeon, this.roomMap, this.rooms, this.config);
+    calculateSpatialNeighbors(this.dungeon, this.roomMap, this.rooms, this.config);
+    addWalls(this.dungeon, this.config);
 
     this.spawnPlayer();
     await this.spawnEnemies(availableSubjects, userId);
@@ -107,7 +125,7 @@ export class DungeonManager {
       const roomFloorTiles: { x: number; y: number }[] = [];
       for (let y = room.y; y < room.y + room.height; y++) {
         for (let x = room.x; x < room.x + room.width; x++) {
-          if (y >= 0 && y < DUNGEON_HEIGHT && x >= 0 && x < DUNGEON_WIDTH) {
+          if (y >= 0 && y < this.dungeonHeight && x >= 0 && x < this.dungeonWidth) {
             if (this.dungeon[y][x] === TILE.FLOOR && this.roomMap[y][x] === i) {
               roomFloorTiles.push({ x, y });
             }
@@ -127,8 +145,8 @@ export class DungeonManager {
   private spawnPlayer() {
     const validSpawnPoints: { x: number; y: number }[] = [];
 
-    for (let y = 0; y < DUNGEON_HEIGHT; y++) {
-      for (let x = 0; x < DUNGEON_WIDTH; x++) {
+    for (let y = 0; y < this.dungeonHeight; y++) {
+      for (let x = 0; x < this.dungeonWidth; x++) {
         if (this.dungeon[y][x] === TILE.FLOOR) {
           validSpawnPoints.push({ x, y });
         }
@@ -206,7 +224,7 @@ export class DungeonManager {
       const roomFloorTiles: { x: number; y: number }[] = [];
       for (let y = room.y; y < room.y + room.height; y++) {
         for (let x = room.x; x < room.x + room.width; x++) {
-          if (y >= 0 && y < DUNGEON_HEIGHT && x >= 0 && x < DUNGEON_WIDTH) {
+          if (y >= 0 && y < this.dungeonHeight && x >= 0 && x < this.dungeonWidth) {
             if (this.dungeon[y][x] === TILE.FLOOR && this.roomMap[y][x] === i) {
               roomFloorTiles.push({ x, y });
             }

@@ -6,6 +6,7 @@ import SeedInputPanel from './editor/SeedInputPanel';
 import EditorToolbar from './editor/EditorToolbar';
 import SaveLevelModal from './editor/SaveLevelModal';
 import LevelBrowserModal from './editor/LevelBrowserModal';
+import Toast, { useToast } from './editor/Toast';
 
 interface EditorCanvasProps {
   availableSubjects: string[];
@@ -15,6 +16,7 @@ export default function EditorCanvas({ availableSubjects }: EditorCanvasProps) {
   const editorState = useEditorState({ availableSubjects });
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showLoadModal, setShowLoadModal] = useState(false);
+  const { messages, showToast, dismissToast } = useToast();
 
   const canvasRef = editorState.canvasRef;
 
@@ -131,6 +133,9 @@ export default function EditorCanvas({ availableSubjects }: EditorCanvasProps) {
     editorState.setStructureSeed(level.structure_seed);
     editorState.setDecorationSeed(level.decoration_seed);
     editorState.setSpawnSeed(level.spawn_seed);
+    editorState.setDungeonWidth(level.width ?? 100);
+    editorState.setDungeonHeight(level.height ?? 100);
+    editorState.setAlgorithm(level.algorithm ?? 1);
 
     // Trigger generation after a short delay to ensure state is updated
     setTimeout(() => {
@@ -157,9 +162,15 @@ export default function EditorCanvas({ availableSubjects }: EditorCanvasProps) {
           structureSeed={editorState.structureSeed}
           decorationSeed={editorState.decorationSeed}
           spawnSeed={editorState.spawnSeed}
+          dungeonWidth={editorState.dungeonWidth}
+          dungeonHeight={editorState.dungeonHeight}
+          algorithm={editorState.algorithm}
           onStructureSeedChange={editorState.setStructureSeed}
           onDecorationSeedChange={editorState.setDecorationSeed}
           onSpawnSeedChange={editorState.setSpawnSeed}
+          onWidthChange={editorState.setDungeonWidth}
+          onHeightChange={editorState.setDungeonHeight}
+          onAlgorithmChange={editorState.setAlgorithm}
           onGenerate={editorState.generateDungeon}
         />
 
@@ -198,9 +209,13 @@ export default function EditorCanvas({ availableSubjects }: EditorCanvasProps) {
             structureSeed={editorState.structureSeed}
             decorationSeed={editorState.decorationSeed}
             spawnSeed={editorState.spawnSeed}
+            width={editorState.dungeonWidth}
+            height={editorState.dungeonHeight}
+            algorithm={editorState.algorithm}
             onClose={() => setShowSaveModal(false)}
-            onSave={() => {
+            onSave={(success, message) => {
               setShowSaveModal(false);
+              showToast(message, success ? 'success' : 'error');
             }}
           />
         )}
@@ -212,6 +227,9 @@ export default function EditorCanvas({ availableSubjects }: EditorCanvasProps) {
             onLoad={handleLoadLevel}
           />
         )}
+
+        {/* Toast Notifications */}
+        <Toast messages={messages} onDismiss={dismissToast} />
       </div>
     </>
   );

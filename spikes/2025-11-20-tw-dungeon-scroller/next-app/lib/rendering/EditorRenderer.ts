@@ -1,6 +1,6 @@
 import { GameRenderer } from './GameRenderer';
 import type { TileType, TileVariant, Room } from '../constants';
-import { TILE, TILE_SOURCE_SIZE, TILESET_COORDS, DUNGEON_WIDTH, DUNGEON_HEIGHT } from '../constants';
+import { TILE, TILE_SOURCE_SIZE, TILESET_COORDS } from '../constants';
 import type { Player } from '../Enemy';
 import { Enemy } from '../Enemy';
 
@@ -39,6 +39,9 @@ export class EditorRenderer {
     rooms: Room[],
     dungeon: TileType[][]
   ): { x: number; y: number } | null {
+    const dungeonWidth = dungeon[0]?.length ?? 0;
+    const dungeonHeight = dungeon.length;
+
     if (tile === 0) {
       return null;
     }
@@ -60,9 +63,9 @@ export class EditorRenderer {
 
     if (tile === 3) {
       const hasWallLeft = x > 0 && dungeon[y][x - 1] === 2;
-      const hasWallRight = x < DUNGEON_WIDTH - 1 && dungeon[y][x + 1] === 2;
+      const hasWallRight = x < dungeonWidth - 1 && dungeon[y][x + 1] === 2;
       const hasWallAbove = y > 0 && dungeon[y - 1][x] === 2;
-      const hasWallBelow = y < DUNGEON_HEIGHT - 1 && dungeon[y + 1][x] === 2;
+      const hasWallBelow = y < dungeonHeight - 1 && dungeon[y + 1][x] === 2;
 
       if (hasWallLeft || hasWallRight) {
         return TILESET_COORDS.DOOR_VERTICAL;
@@ -70,7 +73,7 @@ export class EditorRenderer {
         return TILESET_COORDS.DOOR_HORIZONTAL;
       } else {
         const hasFloorLeft = x > 0 && dungeon[y][x - 1] === 1;
-        const hasFloorRight = x < DUNGEON_WIDTH - 1 && dungeon[y][x + 1] === 1;
+        const hasFloorRight = x < dungeonWidth - 1 && dungeon[y][x + 1] === 1;
 
         if (hasFloorLeft && hasFloorRight) {
           return TILESET_COORDS.DOOR_HORIZONTAL;
@@ -123,6 +126,10 @@ export class EditorRenderer {
     ctx.translate(-camera.x, -camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
+    // Get dungeon dimensions from the actual arrays
+    const dungeonWidth = dungeon[0]?.length ?? 0;
+    const dungeonHeight = dungeon.length;
+
     // Calculate viewport in tile coordinates
     const startCol = Math.floor(camera.x / (baseTileSize * camera.zoom));
     const endCol = startCol + Math.ceil(canvas.width / (baseTileSize * camera.zoom)) + 1;
@@ -130,8 +137,8 @@ export class EditorRenderer {
     const endRow = startRow + Math.ceil(canvas.height / (baseTileSize * camera.zoom)) + 1;
 
     // Render tiles
-    for (let y = Math.max(0, startRow); y < Math.min(DUNGEON_HEIGHT, endRow); y++) {
-      for (let x = Math.max(0, startCol); x < Math.min(DUNGEON_WIDTH, endCol); x++) {
+    for (let y = Math.max(0, startRow); y < Math.min(dungeonHeight, endRow); y++) {
+      for (let x = Math.max(0, startCol); x < Math.min(dungeonWidth, endCol); x++) {
         const tile = dungeon[y][x];
 
         if (tile === TILE.EMPTY) continue;
@@ -178,7 +185,7 @@ export class EditorRenderer {
 
     // Render grid overlay
     if (showGrid) {
-      this.renderGrid(ctx, baseTileSize, startCol, endCol, startRow, endRow);
+      this.renderGrid(ctx, baseTileSize, startCol, endCol, startRow, endRow, dungeonWidth, dungeonHeight);
     }
 
     ctx.restore();
@@ -190,25 +197,27 @@ export class EditorRenderer {
     startCol: number,
     endCol: number,
     startRow: number,
-    endRow: number
+    endRow: number,
+    dungeonWidth: number,
+    dungeonHeight: number
   ) {
     ctx.save();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
     ctx.lineWidth = 1;
 
     // Vertical lines
-    for (let x = Math.max(0, startCol); x <= Math.min(DUNGEON_WIDTH, endCol); x++) {
+    for (let x = Math.max(0, startCol); x <= Math.min(dungeonWidth, endCol); x++) {
       ctx.beginPath();
       ctx.moveTo(x * tileSize, Math.max(0, startRow) * tileSize);
-      ctx.lineTo(x * tileSize, Math.min(DUNGEON_HEIGHT, endRow) * tileSize);
+      ctx.lineTo(x * tileSize, Math.min(dungeonHeight, endRow) * tileSize);
       ctx.stroke();
     }
 
     // Horizontal lines
-    for (let y = Math.max(0, startRow); y <= Math.min(DUNGEON_HEIGHT, endRow); y++) {
+    for (let y = Math.max(0, startRow); y <= Math.min(dungeonHeight, endRow); y++) {
       ctx.beginPath();
       ctx.moveTo(Math.max(0, startCol) * tileSize, y * tileSize);
-      ctx.lineTo(Math.min(DUNGEON_WIDTH, endCol) * tileSize, y * tileSize);
+      ctx.lineTo(Math.min(dungeonWidth, endCol) * tileSize, y * tileSize);
       ctx.stroke();
     }
 

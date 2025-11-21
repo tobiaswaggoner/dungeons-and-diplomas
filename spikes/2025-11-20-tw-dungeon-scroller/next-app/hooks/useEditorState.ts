@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { DungeonManager } from '@/lib/game/DungeonManager';
 import { EditorRenderer, EditorCamera } from '@/lib/rendering/EditorRenderer';
 import type { Player } from '@/lib/Enemy';
-import { DIRECTION, PLAYER_MAX_HP } from '@/lib/constants';
+import { DIRECTION, PLAYER_MAX_HP, DUNGEON_WIDTH, DUNGEON_HEIGHT, DUNGEON_ALGORITHM } from '@/lib/constants';
+import type { DungeonAlgorithm } from '@/lib/constants';
 
 interface UseEditorStateProps {
   availableSubjects: string[];
@@ -15,6 +16,11 @@ export function useEditorState({ availableSubjects }: UseEditorStateProps) {
   const [structureSeed, setStructureSeed] = useState<number>(1);
   const [decorationSeed, setDecorationSeed] = useState<number>(1);
   const [spawnSeed, setSpawnSeed] = useState<number>(1);
+
+  // Dungeon config
+  const [dungeonWidth, setDungeonWidth] = useState<number>(DUNGEON_WIDTH);
+  const [dungeonHeight, setDungeonHeight] = useState<number>(DUNGEON_HEIGHT);
+  const [algorithm, setAlgorithm] = useState<DungeonAlgorithm>(DUNGEON_ALGORITHM.BSP);
 
   // Camera
   const [camera, setCamera] = useState<EditorCamera>({
@@ -68,19 +74,24 @@ export function useEditorState({ availableSubjects }: UseEditorStateProps) {
       null, // No user ID needed for editor
       structureSeed,
       decorationSeed,
-      spawnSeed
+      spawnSeed,
+      {
+        width: dungeonWidth,
+        height: dungeonHeight,
+        algorithm: algorithm
+      }
     );
 
     setDungeonGenerated(true);
 
     // Center camera on dungeon
-    const dungeonWidth = dungeonManagerRef.current.dungeon[0].length;
-    const dungeonHeight = dungeonManagerRef.current.dungeon.length;
+    const actualWidth = dungeonManagerRef.current.dungeon[0].length;
+    const actualHeight = dungeonManagerRef.current.dungeon.length;
     const tileSize = dungeonManagerRef.current.tileSize;
 
     const newCamera = {
-      x: (dungeonWidth * tileSize * 0.5) / 2 - canvasRef.current.width / 2,
-      y: (dungeonHeight * tileSize * 0.5) / 2 - canvasRef.current.height / 2,
+      x: (actualWidth * tileSize * 0.5) / 2 - canvasRef.current.width / 2,
+      y: (actualHeight * tileSize * 0.5) / 2 - canvasRef.current.height / 2,
       zoom: 0.5 // Start zoomed out to see more
     };
 
@@ -88,7 +99,7 @@ export function useEditorState({ availableSubjects }: UseEditorStateProps) {
 
     // Render after a short delay to ensure state is updated
     setTimeout(() => render(), 50);
-  }, [availableSubjects, structureSeed, decorationSeed, spawnSeed]);
+  }, [availableSubjects, structureSeed, decorationSeed, spawnSeed, dungeonWidth, dungeonHeight, algorithm]);
 
   // Render (call this whenever something changes)
   const render = useCallback(() => {
@@ -157,6 +168,12 @@ export function useEditorState({ availableSubjects }: UseEditorStateProps) {
     setStructureSeed,
     setDecorationSeed,
     setSpawnSeed,
+    dungeonWidth,
+    dungeonHeight,
+    algorithm,
+    setDungeonWidth,
+    setDungeonHeight,
+    setAlgorithm,
     generateDungeon,
     dungeonGenerated,
     camera,

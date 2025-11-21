@@ -1,20 +1,39 @@
+import { DUNGEON_ALGORITHM } from '@/lib/constants';
+import type { DungeonAlgorithm } from '@/lib/constants';
+
 interface SeedInputPanelProps {
   structureSeed: number;
   decorationSeed: number;
   spawnSeed: number;
+  dungeonWidth: number;
+  dungeonHeight: number;
+  algorithm: DungeonAlgorithm;
   onStructureSeedChange: (seed: number) => void;
   onDecorationSeedChange: (seed: number) => void;
   onSpawnSeedChange: (seed: number) => void;
+  onWidthChange: (width: number) => void;
+  onHeightChange: (height: number) => void;
+  onAlgorithmChange: (algorithm: DungeonAlgorithm) => void;
   onGenerate: () => void;
 }
+
+const ALGORITHM_NAMES: Record<DungeonAlgorithm, string> = {
+  [DUNGEON_ALGORITHM.BSP]: 'BSP (Binary Space Partitioning)'
+};
 
 export default function SeedInputPanel({
   structureSeed,
   decorationSeed,
   spawnSeed,
+  dungeonWidth,
+  dungeonHeight,
+  algorithm,
   onStructureSeedChange,
   onDecorationSeedChange,
   onSpawnSeedChange,
+  onWidthChange,
+  onHeightChange,
+  onAlgorithmChange,
   onGenerate
 }: SeedInputPanelProps) {
   const generateRandomSeed = () => Math.floor(Math.random() * 1000000);
@@ -152,7 +171,7 @@ export default function SeedInputPanel({
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
+      <div style={{ display: 'flex', gap: '5px', marginBottom: '15px' }}>
         <button
           onClick={randomizeAll}
           style={{
@@ -168,6 +187,82 @@ export default function SeedInputPanel({
         >
           🎲 Randomize All
         </button>
+      </div>
+
+      <hr style={{ border: 'none', borderTop: '1px solid #4CAF50', margin: '15px 0' }} />
+
+      <h3 style={{ margin: '0 0 15px 0', fontSize: '18px' }}>Map Size</h3>
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>
+            Width
+          </label>
+          <input
+            type="number"
+            value={dungeonWidth}
+            min={20}
+            max={200}
+            onChange={(e) => onWidthChange(Math.max(20, Math.min(200, parseInt(e.target.value, 10) || 100)))}
+            style={{
+              width: '100%',
+              padding: '8px',
+              backgroundColor: '#2a2a2a',
+              border: '1px solid #4CAF50',
+              borderRadius: '4px',
+              color: 'white',
+              fontSize: '14px',
+              boxSizing: 'border-box'
+            }}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>
+            Height
+          </label>
+          <input
+            type="number"
+            value={dungeonHeight}
+            min={20}
+            max={200}
+            onChange={(e) => onHeightChange(Math.max(20, Math.min(200, parseInt(e.target.value, 10) || 100)))}
+            style={{
+              width: '100%',
+              padding: '8px',
+              backgroundColor: '#2a2a2a',
+              border: '1px solid #4CAF50',
+              borderRadius: '4px',
+              color: 'white',
+              fontSize: '14px',
+              boxSizing: 'border-box'
+            }}
+          />
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '15px' }}>
+        <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>
+          Algorithm
+        </label>
+        <select
+          value={algorithm}
+          onChange={(e) => onAlgorithmChange(parseInt(e.target.value, 10) as DungeonAlgorithm)}
+          style={{
+            width: '100%',
+            padding: '8px',
+            backgroundColor: '#2a2a2a',
+            border: '1px solid #4CAF50',
+            borderRadius: '4px',
+            color: 'white',
+            fontSize: '14px'
+          }}
+        >
+          {Object.entries(DUNGEON_ALGORITHM).map(([key, value]) => (
+            <option key={value} value={value}>
+              {ALGORITHM_NAMES[value as DungeonAlgorithm] || key}
+            </option>
+          ))}
+        </select>
       </div>
 
       <button

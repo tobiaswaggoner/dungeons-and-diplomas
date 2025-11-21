@@ -80,6 +80,9 @@ function initializeDatabase(database: Database.Database) {
       structure_seed INTEGER NOT NULL,
       decoration_seed INTEGER NOT NULL,
       spawn_seed INTEGER NOT NULL,
+      width INTEGER NOT NULL DEFAULT 100,
+      height INTEGER NOT NULL DEFAULT 100,
+      algorithm INTEGER NOT NULL DEFAULT 1,
       created_by INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -87,6 +90,9 @@ function initializeDatabase(database: Database.Database) {
       FOREIGN KEY (created_by) REFERENCES users(id)
     )
   `);
+
+  // Migration: Add new columns to existing editor_levels table if needed
+  migrateEditorLevelsIfNeeded(database);
 
   // Create indices for editor_levels
   database.exec(`
@@ -118,6 +124,29 @@ function migrateUserXpIfNeeded(database: Database.Database) {
   if (!hasXpColumn) {
     console.log('Adding XP column to users table...');
     database.exec('ALTER TABLE users ADD COLUMN xp INTEGER DEFAULT 0');
+  }
+}
+
+function migrateEditorLevelsIfNeeded(database: Database.Database) {
+  // Check if editor_levels table has the new columns
+  const tableInfo = database.pragma('table_info(editor_levels)') as Array<{ name: string }>;
+  const hasWidthColumn = tableInfo.some((col) => col.name === 'width');
+  const hasHeightColumn = tableInfo.some((col) => col.name === 'height');
+  const hasAlgorithmColumn = tableInfo.some((col) => col.name === 'algorithm');
+
+  if (tableInfo.length > 0 && !hasWidthColumn) {
+    console.log('Adding width column to editor_levels table...');
+    database.exec('ALTER TABLE editor_levels ADD COLUMN width INTEGER NOT NULL DEFAULT 100');
+  }
+
+  if (tableInfo.length > 0 && !hasHeightColumn) {
+    console.log('Adding height column to editor_levels table...');
+    database.exec('ALTER TABLE editor_levels ADD COLUMN height INTEGER NOT NULL DEFAULT 100');
+  }
+
+  if (tableInfo.length > 0 && !hasAlgorithmColumn) {
+    console.log('Adding algorithm column to editor_levels table...');
+    database.exec('ALTER TABLE editor_levels ADD COLUMN algorithm INTEGER NOT NULL DEFAULT 1');
   }
 }
 
@@ -524,6 +553,9 @@ export interface EditorLevel {
   structure_seed: number;
   decoration_seed: number;
   spawn_seed: number;
+  width: number;
+  height: number;
+  algorithm: number;
   created_by?: number;
   created_at?: string;
   updated_at?: string;
@@ -536,8 +568,8 @@ export interface EditorLevel {
 export function saveEditorLevel(level: EditorLevel): number {
   const db = getDatabase();
   const stmt = db.prepare(`
-    INSERT INTO editor_levels (name, structure_seed, decoration_seed, spawn_seed, created_by, notes)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO editor_levels (name, structure_seed, decoration_seed, spawn_seed, width, height, algorithm, created_by, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const result = stmt.run(
@@ -545,6 +577,9 @@ export function saveEditorLevel(level: EditorLevel): number {
     level.structure_seed,
     level.decoration_seed,
     level.spawn_seed,
+    level.width,
+    level.height,
+    level.algorithm,
     level.created_by || null,
     level.notes || null
   );
@@ -606,6 +641,18 @@ export function updateEditorLevel(id: number, updates: Partial<EditorLevel>): vo
   if (updates.spawn_seed !== undefined) {
     fields.push('spawn_seed = ?');
     values.push(updates.spawn_seed);
+  }
+  if (updates.width !== undefined) {
+    fields.push('width = ?');
+    values.push(updates.width);
+  }
+  if (updates.height !== undefined) {
+    fields.push('height = ?');
+    values.push(updates.height);
+  }
+  if (updates.algorithm !== undefined) {
+    fields.push('algorithm = ?');
+    values.push(updates.algorithm);
   }
   if (updates.notes !== undefined) {
     fields.push('notes = ?');
