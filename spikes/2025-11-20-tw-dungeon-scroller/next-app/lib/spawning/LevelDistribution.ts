@@ -136,3 +136,133 @@ export function selectWeightedSubject(subjectWeights: { [key: string]: number },
   // Fallback to first subject
   return subjects[0];
 }
+
+/**
+ * Configuration for a single enemy spawn
+ */
+export interface EnemySpawnConfig {
+  tileX: number;
+  tileY: number;
+  roomIndex: number;
+  level: number;
+  subject: string;
+  playerElo: number;
+}
+
+/**
+ * Input parameters for enemy spawn calculation
+ */
+export interface SpawnCalculationInput {
+  rooms: Array<{ x: number; y: number; width: number; height: number; type: string }>;
+  dungeon: number[][];
+  roomMap: number[][];
+  dungeonWidth: number;
+  dungeonHeight: number;
+  playerRoomId: number;
+  subjectWeights: { [key: string]: number };
+  subjectElos: { [key: string]: number };
+  tileFloorValue: number;
+  spawnRng: SeededRandom;
+}
+
+/**
+ * Pure function to calculate enemy spawn configurations
+ *
+ * This function determines WHERE enemies spawn and WHAT stats they have,
+ * without actually creating Enemy objects or loading sprites.
+ *
+ * @param input All data needed to calculate spawns
+ * @returns Array of spawn configurations
+ */
+export function calculateEnemySpawns(input: SpawnCalculationInput): EnemySpawnConfig[] {
+  const {
+    rooms,
+    dungeon,
+    roomMap,
+    dungeonWidth,
+    dungeonHeight,
+    playerRoomId,
+    subjectWeights,
+    subjectElos,
+    tileFloorValue,
+    spawnRng
+  } = input;
+
+  const spawns: EnemySpawnConfig[] = [];
+
+  for (let i = 0; i < rooms.length; i++) {
+    // Skip player's starting room
+    if (i === playerRoomId) {
+      continue;
+    }
+
+    const room = rooms[i];
+
+    // Collect floor tiles in this room
+    const roomFloorTiles: { x: number; y: number }[] = [];
+    for (let y = room.y; y < room.y + room.height; y++) {
+      for (let x = room.x; x < room.x + room.width; x++) {
+        if (y >= 0 && y < dungeonHeight && x >= 0 && x < dungeonWidth) {
+          if (dungeon[y][x] === tileFloorValue && roomMap[y][x] === i) {
+            roomFloorTiles.push({ x, y });
+          }
+        }
+      }
+    }
+
+    if (roomFloorTiles.length === 0) continue;
+
+    // Determine enemy count and level generation based on room type
+    let enemyCount = 0;
+    let levelGenerator: (index: number, subject: string) => number = () => 1;
+
+    switch (room.type) {
+      case 'treasure':
+        // Treasure rooms: No enemies
+        enemyCount = 0;
+        break;
+
+      case 'combat':
+        // Combat rooms: 1-3 enemies, at least one level 8+
+        enemyCount = spawnRng.nextInt(1, 4);
+        levelGenerator = (index: number) => {
+          // First enemy is guaranteed level 8+
+          return generateCombatRoomLevel(index === 0, spawnRng);
+        };
+        break;
+
+      case 'empty':
+      default:
+        // Normal rooms: 1 enemy, level 1-6 based on player ELO
+        enemyCount = 1;
+        levelGenerator = (_index: number, subject: string) => {
+          const playerElo = subjectElos[subject] || 5;
+          return generateNormalRoomLevel(playerElo, spawnRng);
+        };
+        break;
+    }
+
+    // Generate spawn configurations
+    for (let enemyIndex = 0; enemyIndex < enemyCount; enemyIndex++) {
+      // Select random spawn position
+      const spawnPos = roomFloorTiles[spawnRng.nextIntMax(roomFloorTiles.length)];
+
+      // Select subject (weighted by inverse ELO)
+      const subject = selectWeightedSubject(subjectWeights, spawnRng);
+
+      // Generate level based on room type
+      const level = levelGenerator(enemyIndex, subject);
+
+      spawns.push({
+        tileX: spawnPos.x,
+        tileY: spawnPos.y,
+        roomIndex: i,
+        level,
+        subject,
+        playerElo: subjectElos[subject] || 5
+      });
+    }
+  }
+
+  return spawns;
+}

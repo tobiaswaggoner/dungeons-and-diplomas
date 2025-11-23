@@ -1,6 +1,7 @@
 import {
   TILE,
-  TILE_SOURCE_SIZE
+  TILE_SOURCE_SIZE,
+  DIRECTION_OFFSETS
 } from '../constants';
 import type { TileType, Room } from '../constants';
 import type { Player } from '../Enemy';
@@ -65,12 +66,8 @@ export class GameRenderer {
       if (roomId < 0) {
         // Floor with invalid roomId - check adjacent rooms
         const adjacentRoomIds = new Set<number>();
-        const directions = [
-          { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
-          { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
-        ];
 
-        for (const { dx, dy } of directions) {
+        for (const { dx, dy } of DIRECTION_OFFSETS) {
           const nx = x + dx;
           const ny = y + dy;
           if (ny >= 0 && ny < dungeonHeight && nx >= 0 && nx < dungeonWidth) {
@@ -93,12 +90,8 @@ export class GameRenderer {
     // Walls/Doors/Corners: bright if any adjacent room is clear
     if (tile === TILE.WALL || tile === TILE.DOOR || tile === TILE.CORNER) {
       const adjacentRoomIds = new Set<number>();
-      const directions = [
-        { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
-        { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
-      ];
 
-      for (const { dx, dy } of directions) {
+      for (const { dx, dy } of DIRECTION_OFFSETS) {
         const nx = x + dx;
         const ny = y + dy;
         if (ny >= 0 && ny < dungeonHeight && nx >= 0 && nx < dungeonWidth) {
@@ -140,12 +133,7 @@ export class GameRenderer {
     }
 
     // Player is on a door/wall (roomId < 0) - find adjacent rooms
-    const directions = [
-      { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
-      { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
-    ];
-
-    for (const { dx, dy } of directions) {
+    for (const { dx, dy } of DIRECTION_OFFSETS) {
       const nx = playerTileX + dx;
       const ny = playerTileY + dy;
       if (nx >= 0 && nx < dungeonWidth && ny >= 0 && ny < dungeonHeight) {

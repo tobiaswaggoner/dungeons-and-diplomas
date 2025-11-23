@@ -3,7 +3,8 @@ import {
   DUNGEON_HEIGHT,
   TILE,
   ANIMATION,
-  PLAYER_SPEED_TILES
+  PLAYER_SPEED_TILES,
+  DIRECTION_OFFSETS
 } from '../constants';
 import type { TileType, Room, KeyboardState } from '../constants';
 import type { Player } from '../Enemy';
@@ -63,14 +64,7 @@ export class GameEngine {
     const pTileY = Math.floor((player.y + tileSize / 2) / tileSize);
 
     // Check all 4 adjacent tiles
-    const directions = [
-      { dx: 0, dy: -1 }, // up
-      { dx: 0, dy: 1 },  // down
-      { dx: -1, dy: 0 }, // left
-      { dx: 1, dy: 0 }   // right
-    ];
-
-    for (const { dx, dy } of directions) {
+    for (const { dx, dy } of DIRECTION_OFFSETS) {
       const nx = pTileX + dx;
       const ny = pTileY + dy;
 
@@ -103,14 +97,7 @@ export class GameEngine {
     dungeon: TileType[][],
     doorStates: Map<string, boolean>
   ): { x: number; y: number } | null {
-    const directions = [
-      { dx: 0, dy: -1 }, // up
-      { dx: 0, dy: 1 },  // down
-      { dx: -1, dy: 0 }, // left
-      { dx: 1, dy: 0 }   // right
-    ];
-
-    for (const { dx, dy } of directions) {
+    for (const { dx, dy } of DIRECTION_OFFSETS) {
       const nx = fromTileX + dx;
       const ny = fromTileY + dy;
 

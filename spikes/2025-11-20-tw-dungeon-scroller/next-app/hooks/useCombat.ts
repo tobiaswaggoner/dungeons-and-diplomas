@@ -6,6 +6,7 @@ import { COMBAT_TIME_LIMIT, COMBAT_FEEDBACK_DELAY, DAMAGE_CORRECT, DAMAGE_WRONG,
 import { selectQuestion } from '@/lib/combat/QuestionSelector';
 import { calculateEnemyXpReward } from '@/lib/scoring/LevelCalculator';
 import { calculatePlayerDamage, calculateEnemyDamage } from '@/lib/combat/DamageCalculator';
+import { api } from '@/lib/api';
 
 interface UseCombatProps {
   questionDatabase: QuestionDatabase | null;
@@ -69,12 +70,9 @@ export function useCombat({
     if (!userId) return;
 
     try {
-      const response = await fetch(`/api/session-elo?userId=${userId}`);
-      if (response.ok) {
-        const eloScores = await response.json();
-        const subjectElo = eloScores.find((s: any) => s.subjectKey === subjectKey);
-        currentPlayerEloRef.current = subjectElo?.averageElo || 5;
-      }
+      const eloScores = await api.elo.getSessionElo(userId);
+      const subjectElo = eloScores.find((s) => s.subjectKey === subjectKey);
+      currentPlayerEloRef.current = subjectElo?.averageElo || 5;
     } catch (error) {
       console.error('Failed to load player ELO:', error);
       currentPlayerEloRef.current = 5; // Default fallback
@@ -144,17 +142,13 @@ export function useCombat({
     // Track answer in database
     if (userId && combatQuestion.id) {
       try {
-        await fetch('/api/answers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userId,
-            question_id: combatQuestion.id,
-            selected_answer_index: isTimeout ? -1 : selectedIndex,
-            is_correct: isCorrect,
-            answer_time_ms: answerTimeMs,
-            timeout_occurred: isTimeout
-          })
+        await api.answers.logAnswer({
+          user_id: userId,
+          question_id: combatQuestion.id,
+          selected_answer_index: isTimeout ? -1 : selectedIndex,
+          is_correct: isCorrect,
+          answer_time_ms: answerTimeMs,
+          timeout_occurred: isTimeout
         });
 
         onUpdateSessionScores(currentSubjectRef.current);
@@ -209,15 +203,11 @@ export function useCombat({
       const xpReward = calculateEnemyXpReward(enemy.level, playerElo);
 
       try {
-        await fetch('/api/xp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userId,
-            xp_amount: xpReward,
-            reason: 'enemy_defeated',
-            enemy_level: enemy.level
-          })
+        await api.xp.addXp({
+          user_id: userId,
+          xp_amount: xpReward,
+          reason: 'enemy_defeated',
+          enemy_level: enemy.level
         });
 
         if (onXpGained) {

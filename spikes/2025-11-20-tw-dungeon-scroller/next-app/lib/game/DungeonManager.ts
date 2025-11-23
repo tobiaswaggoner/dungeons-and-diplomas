@@ -21,14 +21,13 @@ import { initializeDungeonRNG, generateRandomSeed, getSpawnRng, getDecorationRng
 import { SpriteSheetLoader } from '../SpriteSheetLoader';
 import { Enemy } from '../Enemy';
 import {
-  generateNormalRoomLevel,
-  generateCombatRoomLevel,
   calculateSubjectWeights,
-  selectWeightedSubject
+  calculateEnemySpawns
 } from '../spawning/LevelDistribution';
 import type { TileTheme, ImportedTileset, RenderMap } from '../tiletheme/types';
 import { generateRenderMap } from '../tiletheme/RenderMapGenerator';
 import { getThemeRenderer } from '../tiletheme/ThemeRenderer';
+import { api } from '../api';
 
 export class DungeonManager {
   public dungeon: TileType[][] = [];
@@ -80,13 +79,7 @@ export class DungeonManager {
    */
   async loadTheme(themeId: number): Promise<boolean> {
     try {
-      const response = await fetch(`/api/theme/${themeId}`);
-      if (!response.ok) {
-        console.warn(`Failed to load theme ${themeId}, using fallback rendering`);
-        return false;
-      }
-
-      const data = await response.json();
+      const data = await api.theme.getTheme(themeId);
       this.darkTheme = data.theme;
       this.tilesets = data.tilesets;
 
@@ -101,7 +94,7 @@ export class DungeonManager {
       console.log(`Loaded theme: ${this.darkTheme?.name}`);
       return true;
     } catch (error) {
-      console.error('Error loading theme:', error);
+      console.warn(`Failed to load theme ${themeId}, using fallback rendering:`, error);
       return false;
     }
   }
@@ -249,18 +242,15 @@ export class DungeonManager {
 
     if (userId) {
       try {
-        const response = await fetch(`/api/session-elo?userId=${userId}`);
-        if (response.ok) {
-          const eloData: Array<{ subjectKey: string; subjectName: string; averageElo: number }> = await response.json();
+        const eloData = await api.elo.getSessionElo(userId);
 
-          // Build ELO map
-          for (const entry of eloData) {
-            subjectElos[entry.subjectKey] = entry.averageElo;
-          }
-
-          // Calculate subject weights (inverse ELO - weak subjects get more enemies)
-          subjectWeights = calculateSubjectWeights(subjectElos);
+        // Build ELO map
+        for (const entry of eloData) {
+          subjectElos[entry.subjectKey] = entry.averageElo;
         }
+
+        // Calculate subject weights (inverse ELO - weak subjects get more enemies)
+        subjectWeights = calculateSubjectWeights(subjectElos);
       } catch (error) {
         console.error('Failed to load user ELO data, using fallback spawning:', error);
       }
@@ -274,94 +264,36 @@ export class DungeonManager {
       }
     }
 
-    // Spawn enemies per room based on room type
-    for (let i = 0; i < this.rooms.length; i++) {
-      // Skip player's starting room
-      if (i === playerRoomId) {
-        continue;
-      }
+    // Calculate spawn configurations using pure function
+    const spawnConfigs = calculateEnemySpawns({
+      rooms: this.rooms,
+      dungeon: this.dungeon,
+      roomMap: this.roomMap,
+      dungeonWidth: this.dungeonWidth,
+      dungeonHeight: this.dungeonHeight,
+      playerRoomId,
+      subjectWeights,
+      subjectElos,
+      tileFloorValue: TILE.FLOOR,
+      spawnRng: getSpawnRng()
+    });
 
-      const room = this.rooms[i];
+    // Create Enemy instances from spawn configurations
+    for (const config of spawnConfigs) {
+      const enemy = new Enemy(
+        config.tileX * this.tileSize,
+        config.tileY * this.tileSize,
+        'goblin',
+        config.roomIndex,
+        config.level,
+        config.subject
+      );
 
-      // Collect floor tiles in this room
-      const roomFloorTiles: { x: number; y: number }[] = [];
-      for (let y = room.y; y < room.y + room.height; y++) {
-        for (let x = room.x; x < room.x + room.width; x++) {
-          if (y >= 0 && y < this.dungeonHeight && x >= 0 && x < this.dungeonWidth) {
-            if (this.dungeon[y][x] === TILE.FLOOR && this.roomMap[y][x] === i) {
-              roomFloorTiles.push({ x, y });
-            }
-          }
-        }
-      }
+      // Set player ELO for this subject (for dynamic aggro radius)
+      enemy.playerElo = config.playerElo;
 
-      if (roomFloorTiles.length === 0) continue;
-
-      // Determine enemy count and level generation based on room type
-      let enemyCount = 0;
-      let levelGenerator: (index: number) => number = () => 1; // Default level generator
-
-      const spawnRng = getSpawnRng();
-
-      switch (room.type) {
-        case 'treasure':
-          // Treasure rooms: No enemies
-          enemyCount = 0;
-          break;
-
-        case 'combat':
-          // Combat rooms: 1-3 enemies, at least one level 8+
-          enemyCount = spawnRng.nextInt(1, 4); // 1-3
-          levelGenerator = (index: number) => {
-            // First enemy is guaranteed level 8+
-            if (index === 0) {
-              return generateCombatRoomLevel(true, spawnRng);
-            } else {
-              return generateCombatRoomLevel(false, spawnRng);
-            }
-          };
-          break;
-
-        case 'empty':
-        default:
-          // Normal rooms: 1 enemy, level 1-6 based on player ELO
-          enemyCount = 1;
-          levelGenerator = () => {
-            // Select subject first to get appropriate ELO
-            const subject = selectWeightedSubject(subjectWeights, spawnRng);
-            const playerElo = subjectElos[subject] || 5;
-            return generateNormalRoomLevel(playerElo, spawnRng);
-          };
-          break;
-      }
-
-      // Spawn enemies
-      for (let enemyIndex = 0; enemyIndex < enemyCount; enemyIndex++) {
-        // Select random spawn position
-        const spawnPos = roomFloorTiles[spawnRng.nextIntMax(roomFloorTiles.length)];
-
-        // Select subject (weighted by inverse ELO)
-        const subject = selectWeightedSubject(subjectWeights, spawnRng);
-
-        // Generate level based on room type
-        const level = levelGenerator(enemyIndex);
-
-        // Create and load enemy
-        const enemy = new Enemy(
-          spawnPos.x * this.tileSize,
-          spawnPos.y * this.tileSize,
-          'goblin',
-          i,
-          level,
-          subject
-        );
-
-        // Set player ELO for this subject (for dynamic aggro radius)
-        enemy.playerElo = subjectElos[subject] || 5;
-
-        await enemy.load();
-        this.enemies.push(enemy);
-      }
+      await enemy.load();
+      this.enemies.push(enemy);
     }
   }
 }

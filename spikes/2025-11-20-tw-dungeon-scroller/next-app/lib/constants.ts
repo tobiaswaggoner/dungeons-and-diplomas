@@ -63,6 +63,14 @@ export const DIRECTION = {
   RIGHT: 'right'
 } as const;
 
+// Direction offsets for adjacent tile checks (4 cardinal directions)
+export const DIRECTION_OFFSETS = [
+  { dx: 0, dy: -1 }, // up
+  { dx: 0, dy: 1 },  // down
+  { dx: -1, dy: 0 }, // left
+  { dx: 1, dy: 0 }   // right
+] as const;
+
 // Animation constants
 export const ANIMATION = {
   SPELLCAST: 'spellcast',

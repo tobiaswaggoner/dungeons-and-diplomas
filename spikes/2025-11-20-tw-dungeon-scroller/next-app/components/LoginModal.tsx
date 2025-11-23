@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 interface LoginModalProps {
-  onLogin: (userId: number, username: string) => void;
+  onLogin: (userId: number, username: string, xp?: number) => void;
 }
 
 export default function LoginModal({ onLogin }: LoginModalProps) {
@@ -41,8 +41,8 @@ export default function LoginModal({ onLogin }: LoginModalProps) {
       localStorage.setItem('userId', data.id.toString());
       localStorage.setItem('username', data.username);
 
-      // Call parent callback
-      onLogin(data.id, data.username);
+      // Call parent callback with XP
+      onLogin(data.id, data.username, data.xp);
     } catch (err) {
       setError('Login fehlgeschlagen. Bitte versuche es erneut.');
       console.error('Login error:', err);

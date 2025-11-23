@@ -15,6 +15,12 @@ interface UseGameStateProps {
   onPlayerHpUpdate: (hp: number) => void;
   onXpGained?: (amount: number) => void;
   onTreasureCollected?: (screenX: number, screenY: number, xpAmount: number) => void;
+  /** Reference to combat state (injected from useCombat) */
+  inCombatRef?: React.MutableRefObject<boolean>;
+  /** Callback when combat should start (injected from useCombat) */
+  onStartCombat?: (enemy: any) => void;
+  /** Shared player reference (owned by parent component) */
+  playerRef?: React.MutableRefObject<Player>;
 }
 
 export function useGameState({
@@ -23,7 +29,10 @@ export function useGameState({
   userId,
   onPlayerHpUpdate,
   onXpGained,
-  onTreasureCollected
+  onTreasureCollected,
+  inCombatRef: externalInCombatRef,
+  onStartCombat,
+  playerRef: externalPlayerRef
 }: UseGameStateProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const minimapRef = useRef<HTMLCanvasElement>(null);
@@ -34,7 +43,8 @@ export function useGameState({
   const gameLoopIdRef = useRef<number | null>(null);
   const lastTimeRef = useRef(0);
 
-  const playerRef = useRef<Player>({
+  // Player reference - use external if provided, otherwise create local fallback
+  const fallbackPlayerRef = useRef<Player>({
     x: 0,
     y: 0,
     width: 0,
@@ -44,6 +54,7 @@ export function useGameState({
     hp: PLAYER_MAX_HP,
     maxHp: PLAYER_MAX_HP
   });
+  const playerRef = externalPlayerRef || fallbackPlayerRef;
 
   const keysRef = useRef<KeyboardState>({
     ArrowUp: false,
@@ -69,9 +80,10 @@ export function useGameState({
     onPlayerHpUpdate(PLAYER_MAX_HP);
   };
 
-  // Combat state will be injected
-  const inCombatRef = useRef(false);
-  const startCombatRef = useRef<(enemy: any) => void>(() => {});
+  // Combat state - use external refs/callbacks if provided, otherwise create local fallbacks
+  const fallbackInCombatRef = useRef(false);
+  const inCombatRef = externalInCombatRef || fallbackInCombatRef;
+  const startCombatCallback = onStartCombat || (() => {});
 
   const handleTreasureCollected = async (tileX: number, tileY: number) => {
     if (!userId) return;
@@ -152,7 +164,7 @@ export function useGameState({
       manager.rooms,
       manager.dungeon,
       manager.roomMap,
-      startCombatRef.current,
+      startCombatCallback,
       inCombatRef.current,
       manager.doorStates
     );
@@ -278,8 +290,6 @@ export function useGameState({
     gameInitialized,
     gamePausedRef,
     playerRef,
-    inCombatRef,
-    startCombatRef,
     generateNewDungeon,
     dungeonManagerRef
   };

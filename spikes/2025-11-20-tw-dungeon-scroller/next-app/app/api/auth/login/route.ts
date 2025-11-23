@@ -16,7 +16,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       id: user.id,
-      username: user.username
+      username: user.username,
+      xp: user.xp
     });
   } catch (error) {
     console.error('Error during login:', error);
