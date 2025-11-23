@@ -120,22 +120,21 @@ next-app/
 
 ---
 
-### [R05] Date.now() Injection in useCombat
+### [R05] ✅ Date.now() Injection in useCombat - ERLEDIGT
 **Problem:** useCombat.ts verwendet `Date.now()` direkt (Zeilen 122, 138) für Answer-Timing. Dies verhindert deterministische Tests.
 
-**Betroffene Dateien:**
-- `hooks/useCombat.ts:122` - `questionStartTimeRef.current = Date.now()`
-- `hooks/useCombat.ts:138` - `Date.now() - questionStartTimeRef.current`
+**Abgeschlossen:** 2025-11-23
 
-**Lösung:** Clock Interface mit Injection.
-
-**Aufwand:** S | **Risiko:** niedrig
-
-**Schritte:**
-1. `lib/time/Clock.ts` Interface: `{ now(): number }`
-2. `lib/time/SystemClock.ts` Default-Implementation
-3. useCombat Props um optionalen `clock` Parameter erweitern
-4. Tests können Mock-Clock mit festen Werten injizieren
+**Änderungen:**
+- ✅ `lib/time/Clock.ts` erstellt mit:
+  - `Clock` Interface: `{ now(): number }`
+  - `SystemClock` - Production-Implementation
+  - `MockClock` - Test-Implementation mit `setTime()` und `advance()`
+  - `defaultClock` - Export der Default-Instance
+- ✅ `lib/time/index.ts` erstellt für Re-exports
+- ✅ `hooks/useCombat.ts` refaktoriert:
+  - Neuer optionaler `clock` Parameter in UseCombatProps
+  - `Date.now()` durch `clock.now()` ersetzt
 
 ---
 
@@ -164,20 +163,25 @@ next-app/
 
 ---
 
-### [R07] LevelDistribution.ts aufteilen
+### [R07] ✅ LevelDistribution.ts aufteilen - ERLEDIGT
 **Problem:** LevelDistribution.ts (268 Zeilen) enthält 5+ Helper-Funktionen mit verschiedenen Verantwortlichkeiten: Level-Berechnung, Subject-Weighting, Spawn-Konfiguration.
 
-**Betroffene Dateien:**
-- `lib/spawning/LevelDistribution.ts:1-268` - Mixed Concerns
+**Abgeschlossen:** 2025-11-23
 
-**Lösung:** Aufteilung in fokussierte Module.
-
-**Aufwand:** S | **Risiko:** niedrig
-
-**Schritte:**
-1. `SubjectWeighting.ts` extrahieren - Subject-basierte Gewichtung
-2. `SpawnCalculator.ts` extrahieren - Spawn-Konfiguration
-3. LevelDistribution als Orchestrator behalten (<100 Zeilen)
+**Änderungen:**
+- ✅ `lib/spawning/SubjectWeighting.ts` erstellt mit:
+  - `calculateSubjectWeights()` - Berechnet inverse ELO-basierte Gewichtung
+  - `selectWeightedSubject()` - Wählt Subject nach Gewichtung
+- ✅ `lib/spawning/SpawnCalculator.ts` erstellt mit:
+  - `EnemySpawnConfig` Interface
+  - `SpawnCalculationInput` Interface
+  - `calculateEnemySpawns()` - Haupt-Spawn-Logik
+  - `collectRoomFloorTiles()` - Helper für Floor-Tile-Sammlung
+  - `getRoomSpawnStrategy()` - Room-Type-basierte Strategie
+- ✅ `lib/spawning/LevelDistribution.ts` refaktoriert:
+  - Re-exports für Abwärtskompatibilität
+  - Nur noch Level-Generierung: `randomNormal`, `generateNormalRoomLevel`, `generateCombatRoomLevel`
+  - Von 268 auf 93 Zeilen reduziert
 
 ---
 
@@ -201,40 +205,39 @@ next-app/
 
 ---
 
-### [R09] Database Connection Factory für Tests
+### [R09] ✅ Database Connection Factory für Tests - ERLEDIGT
 **Problem:** Datenbank ist Singleton ohne Reset-Möglichkeit. Tests beeinflussen globalen State.
 
-**Betroffene Dateien:**
-- `lib/db/connection.ts:8-16` - Module-Level `let db` Singleton
+**Abgeschlossen:** 2025-11-23
 
-**Lösung:** Factory-Funktion mit optionalem Database Path.
-
-**Aufwand:** S | **Risiko:** niedrig
-
-**Schritte:**
-1. `createDatabase(path?: string)` Factory erstellen
-2. In-Memory Option für Tests: `:memory:`
-3. `resetDatabase()` Funktion für Test-Setup
-4. Bestehender Code bleibt durch Default-Path kompatibel
+**Änderungen:**
+- ✅ `lib/db/connection.ts` erweitert mit:
+  - `DatabaseOptions` Interface: `{ path?: string, seed?: boolean }`
+  - `createDatabase(options)` - Factory für Custom-Databases
+  - `createTestDatabase(seed?)` - Convenience für In-Memory Tests
+  - `resetDatabase()` - Schließt und leert Singleton
+- ✅ `lib/db/init.ts` erweitert mit:
+  - `InitOptions` Interface: `{ seed?: boolean }`
+  - `initializeDatabase()` akzeptiert nun Seed-Option
+- ✅ `lib/db/index.ts` - Exportiert neue Funktionen und Types
 
 ---
 
-### [R10] ELO-Aggregation aus /api/stats extrahieren
+### [R10] ✅ ELO-Aggregation aus /api/stats extrahieren - ERLEDIGT
 **Problem:** `/api/stats/route.ts` (140 Zeilen) reimplementiert Answer-Grouping-Logik die in `lib/db/questions.ts` bereits existiert.
 
-**Betroffene Dateien:**
-- `app/api/stats/route.ts:45-128` - Duplizierte Aggregationslogik
-- `lib/db/questions.ts:129-160` - Ähnliche Logik für getQuestionsWithEloBySubject
+**Abgeschlossen:** 2025-11-23
 
-**Lösung:** Aggregationslogik in DB-Layer konsolidieren.
-
-**Aufwand:** S | **Risiko:** mittel
-
-**Schritte:**
-1. `lib/db/stats.ts` erstellen für Stats-spezifische Queries
-2. Aggregationslogik aus API-Route verschieben
-3. API-Route auf DB-Funktion umstellen
-4. Duplikation eliminieren
+**Änderungen:**
+- ✅ `lib/db/stats.ts` erstellt mit:
+  - `QuestionStats` Interface - Stats für einzelne Fragen
+  - `SubjectStats` Interface - Stats für Fächer
+  - `UserStats` Interface - Vollständige User-Statistiken
+  - `getUserStats(userId)` - Aggregiert alle User-Statistiken
+- ✅ `app/api/stats/route.ts` vereinfacht:
+  - Von 140 auf 21 Zeilen reduziert
+  - Nutzt nun `getUserStats()` aus DB-Layer
+- ✅ `lib/db/index.ts` - Exportiert neue Funktionen und Types
 
 ---
 
@@ -268,34 +271,35 @@ R10 (Stats Extract) ─────> Unabhängig
 3. **R04** - ✅ constants.ts aufteilen - ERLEDIGT 2025-11-23
 4. **R08** - ✅ API Validation Utility - ERLEDIGT 2025-11-23
 
-### Nächster Sprint (mittlerer Impact)
-5. **R05** - Clock Injection (S, niedrig) - deterministische Tests
-6. **R07** - LevelDistribution Split (S, niedrig) - kleinere Module
-7. **R09** - DB Factory (S, niedrig) - Test-Setup verbessert
-8. **R10** - Stats Extraktion (S, mittel) - Code-Konsolidierung
+### Nächster Sprint (mittlerer Impact) ✅ ABGESCHLOSSEN
+5. **R05** - ✅ Clock Injection - ERLEDIGT 2025-11-23
+6. **R07** - ✅ LevelDistribution Split - ERLEDIGT 2025-11-23
+7. **R09** - ✅ DB Factory - ERLEDIGT 2025-11-23
+8. **R10** - ✅ Stats Extraktion - ERLEDIGT 2025-11-23
 
-### Später (höheres Risiko)
+### Später (höheres Risiko) <- nächste Runde!
 9. **R02** - useGameState Split (M, mittel) - komplex aber wichtig
 10. **R06** - Combat Reducer (M, mittel) - komplexe State-Logik
 
 ## Metriken (Vorher/Nachher Ziel)
 
-| Metrik | Vorher | Nach Quick Wins | Ziel |
-|--------|--------|-----------------|------|
-| Größte Komponente | 379 Zeilen | 379 Zeilen | <250 Zeilen |
-| Größter Hook | 317 Zeilen | 317 Zeilen | <150 Zeilen |
-| Größtes Lib-Modul | 351 Zeilen | ~250 Zeilen | <200 Zeilen |
-| Dateien >300 Zeilen | 4 | 3 | 0 |
-| Unit-testbare Hooks | ~30% | ~40% | >80% |
+| Metrik | Vorher | Nach Quick Wins | Nach Sprint 2 | Ziel |
+|--------|--------|-----------------|---------------|------|
+| Größte Komponente | 379 Zeilen | 379 Zeilen | 379 Zeilen | <250 Zeilen |
+| Größter Hook | 317 Zeilen | 317 Zeilen | 317 Zeilen | <150 Zeilen |
+| Größtes Lib-Modul | 351 Zeilen | ~250 Zeilen | ~250 Zeilen | <200 Zeilen |
+| Dateien >300 Zeilen | 4 | 3 | 3 | 0 |
+| Unit-testbare Hooks | ~30% | ~40% | ~60% | >80% |
 
 ---
 
 **Erstellt:** 2025-11-23
 **Autor:** Claude Code Analyse
-**Status:** Quick Wins abgeschlossen (4/10)
+**Status:** Sprint 2 abgeschlossen (8/10)
 
 ## Änderungshistorie
 
 | Datum | Phase | Änderungen |
 |-------|-------|------------|
 | 2025-11-23 | Quick Wins | R01, R03, R04, R08 abgeschlossen |
+| 2025-11-23 | Sprint 2 | R05, R07, R09, R10 abgeschlossen |
