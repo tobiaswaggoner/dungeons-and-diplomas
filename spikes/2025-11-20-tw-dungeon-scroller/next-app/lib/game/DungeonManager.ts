@@ -26,7 +26,7 @@ import {
 } from '../spawning/LevelDistribution';
 import type { TileTheme, ImportedTileset, RenderMap } from '../tiletheme/types';
 import { generateRenderMap } from '../tiletheme/RenderMapGenerator';
-import { getThemeRenderer } from '../tiletheme/ThemeRenderer';
+import { ThemeLoader } from '../tiletheme/ThemeLoader';
 import { api } from '../api';
 
 export class DungeonManager {
@@ -75,28 +75,19 @@ export class DungeonManager {
   }
 
   /**
-   * Load a tile theme and its tilesets
+   * Load a tile theme and its tilesets using ThemeLoader
    */
   async loadTheme(themeId: number): Promise<boolean> {
-    try {
-      const data = await api.theme.getTheme(themeId);
-      this.darkTheme = data.theme;
-      this.tilesets = data.tilesets;
+    const result = await ThemeLoader.loadTheme(themeId);
 
-      // Load all tilesets into ThemeRenderer
-      const renderer = getThemeRenderer();
-      for (const tileset of this.tilesets) {
-        if (!renderer.isTilesetLoaded(tileset.id)) {
-          await renderer.loadTileset(tileset.id, tileset.path);
-        }
-      }
-
-      console.log(`Loaded theme: ${this.darkTheme?.name}`);
-      return true;
-    } catch (error) {
-      console.warn(`Failed to load theme ${themeId}, using fallback rendering:`, error);
+    if (!result) {
+      console.warn(`Failed to load theme ${themeId}, using fallback rendering`);
       return false;
     }
+
+    this.darkTheme = result.theme;
+    this.tilesets = result.tilesets;
+    return true;
   }
 
   async generateNewDungeon(

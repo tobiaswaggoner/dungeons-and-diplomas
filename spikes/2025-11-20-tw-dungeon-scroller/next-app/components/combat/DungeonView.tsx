@@ -8,6 +8,7 @@ import type { RenderMap, TileTheme, TileVariant, WallType } from '@/lib/tilethem
 import { WALL_TYPE } from '@/lib/tiletheme/types';
 import { getThemeRenderer } from '@/lib/tiletheme/ThemeRenderer';
 import { detectDoorType } from '@/lib/tiletheme/WallTypeDetector';
+import { ThemeLoader } from '@/lib/tiletheme/ThemeLoader';
 import { VisibilityCalculator } from '@/lib/visibility';
 
 interface DungeonViewProps {
@@ -46,36 +47,22 @@ export default function DungeonView({
   // Check if we have real dungeon data
   const hasRealDungeonData = !!(player && dungeon && renderMap && darkTheme);
 
-  // Load fallback theme only if no real dungeon data
+  // Load fallback theme only if no real dungeon data (using ThemeLoader)
   useEffect(() => {
     if (hasRealDungeonData) return;
 
-    const loadTheme = async () => {
-      try {
-        const response = await fetch('/api/theme/1');
-        if (!response.ok) {
-          console.warn('Failed to load theme for combat view');
-          return;
-        }
+    const loadFallbackTheme = async () => {
+      const result = await ThemeLoader.loadTheme(1);
 
-        const data = await response.json();
-        fallbackThemeRef.current = data.theme;
-        const tilesets = data.tilesets;
-
-        const renderer = getThemeRenderer();
-        for (const tileset of tilesets) {
-          if (!renderer.isTilesetLoaded(tileset.id)) {
-            await renderer.loadTileset(tileset.id, tileset.path);
-          }
-        }
-
+      if (result) {
+        fallbackThemeRef.current = result.theme;
         setFallbackThemeLoaded(true);
-      } catch (error) {
-        console.error('Error loading theme for combat view:', error);
+      } else {
+        console.warn('Failed to load fallback theme for combat view');
       }
     };
 
-    loadTheme();
+    loadFallbackTheme();
   }, [hasRealDungeonData]);
 
   // Render with real dungeon data (zoomed in on player)

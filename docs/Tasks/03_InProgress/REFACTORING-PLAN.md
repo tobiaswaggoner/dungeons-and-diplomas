@@ -79,34 +79,19 @@ next-app/
 
 ---
 
-### [R03] Theme-Loading aus DungeonView extrahieren
+### [R03] ✅ Theme-Loading aus DungeonView extrahieren - ERLEDIGT
 
-**Problem:** `DungeonView.tsx` (408 Zeilen) enthält Theme-Loading-Logik (Zeilen 48-78) die fast identisch in `DungeonManager.ts` existiert. Die Komponente hat zu viele Verantwortlichkeiten.
+**Problem:** `DungeonView.tsx` und `DungeonManager.ts` enthielten fast identische Theme-Loading-Logik.
 
-**Betroffene Dateien:**
-- `components/combat/DungeonView.tsx:48-78` - Fallback-Theme-Loading
-- `lib/game/DungeonManager.ts:80-110` - Theme-Loading (ähnliche Logik)
+**Abgeschlossen:** 2025-11-23
 
-**Lösung:** Theme-Loading in existierenden `ThemeRenderer` integrieren oder neuen `ThemeLoader`-Service erstellen.
-
-```typescript
-// lib/tiletheme/ThemeLoader.ts
-export class ThemeLoader {
-  private static cache = new Map<number, TileTheme>();
-
-  static async loadTheme(themeId: number): Promise<TileTheme> { ... }
-  static async ensureTilesets(tilesets: Tileset[]): Promise<void> { ... }
-}
-```
-
-**Aufwand:** M | **Risiko:** niedrig
-
-**Schritte:**
-1. `lib/tiletheme/ThemeLoader.ts` erstellen
-2. Theme-Loading-Logik aus DungeonView extrahieren
-3. DungeonManager auf ThemeLoader umstellen
-4. DungeonView auf ThemeLoader umstellen
-5. Caching für Themes implementieren
+**Änderungen:**
+- ✅ `lib/tiletheme/ThemeLoader.ts` erstellt mit:
+  - `loadTheme()` - Lädt Theme via API mit Caching
+  - `ensureTilesetsLoaded()` - Lädt alle Tilesets in ThemeRenderer
+  - `clearCache()`, `isCached()`, `getCached()` - Cache-Management
+- ✅ `lib/game/DungeonManager.ts` - `loadTheme()` nutzt nun ThemeLoader
+- ✅ `components/combat/DungeonView.tsx` - Fallback-Theme-Loading nutzt ThemeLoader
 
 ---
 
@@ -352,7 +337,7 @@ R10 (tiletheme/db)  ────────────────────
 
 ### Phase 2: Kernmodule (3-4 Tage)
 4. **R02** - ✅ Visibility-Logik - ERLEDIGT 2025-11-23
-5. **R03** - ThemeLoader (2h)
+5. **R03** - ✅ ThemeLoader - ERLEDIGT 2025-11-23
 6. **R04** - CombatEngine (3h)
 
 ### Phase 3: Größere Refactorings (5-7 Tage)
@@ -383,4 +368,4 @@ R10 (tiletheme/db)  ────────────────────
 | Datum | Phase | Änderungen |
 |-------|-------|------------|
 | 2025-11-23 | Phase 1 | R01, R05, R06 abgeschlossen |
-| 2025-11-23 | Phase 2 | R02 abgeschlossen |
+| 2025-11-23 | Phase 2 | R02, R03 abgeschlossen |
