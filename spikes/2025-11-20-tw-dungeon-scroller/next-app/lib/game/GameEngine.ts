@@ -84,6 +84,75 @@ export class GameEngine {
     return null;
   }
 
+  /**
+   * Check if an entity is on a specific tile
+   */
+  private isEntityOnTile(entityX: number, entityY: number, tileX: number, tileY: number, tileSize: number): boolean {
+    const entityTileX = Math.floor((entityX + tileSize / 2) / tileSize);
+    const entityTileY = Math.floor((entityY + tileSize / 2) / tileSize);
+    return entityTileX === tileX && entityTileY === tileY;
+  }
+
+  /**
+   * Find a free adjacent tile to push entity to
+   */
+  private findFreeTile(
+    fromTileX: number,
+    fromTileY: number,
+    tileSize: number,
+    dungeon: TileType[][],
+    doorStates: Map<string, boolean>
+  ): { x: number; y: number } | null {
+    const directions = [
+      { dx: 0, dy: -1 }, // up
+      { dx: 0, dy: 1 },  // down
+      { dx: -1, dy: 0 }, // left
+      { dx: 1, dy: 0 }   // right
+    ];
+
+    for (const { dx, dy } of directions) {
+      const nx = fromTileX + dx;
+      const ny = fromTileY + dy;
+
+      if (nx >= 0 && nx < DUNGEON_WIDTH && ny >= 0 && ny < DUNGEON_HEIGHT) {
+        const tile = dungeon[ny][nx];
+        // Floor is always free
+        if (tile === TILE.FLOOR) {
+          return { x: nx * tileSize, y: ny * tileSize };
+        }
+        // Open door is also free
+        if (tile === TILE.DOOR) {
+          const isOpen = doorStates.get(`${nx},${ny}`) ?? false;
+          if (isOpen) {
+            return { x: nx * tileSize, y: ny * tileSize };
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Push entity away from a closed door
+   */
+  private pushEntityFromDoor(
+    entity: { x: number; y: number },
+    doorTileX: number,
+    doorTileY: number,
+    tileSize: number,
+    dungeon: TileType[][],
+    doorStates: Map<string, boolean>
+  ): void {
+    if (this.isEntityOnTile(entity.x, entity.y, doorTileX, doorTileY, tileSize)) {
+      const freeTile = this.findFreeTile(doorTileX, doorTileY, tileSize, dungeon, doorStates);
+      if (freeTile) {
+        entity.x = freeTile.x;
+        entity.y = freeTile.y;
+      }
+    }
+  }
+
   public updatePlayer(
     dt: number,
     player: Player,
@@ -95,6 +164,7 @@ export class GameEngine {
     playerSprite: SpriteSheetLoader | null,
     inCombat: boolean,
     doorStates: Map<string, boolean>,
+    enemies: Enemy[],
     treasures?: Set<string>,
     onTreasureCollected?: (x: number, y: number) => void
   ) {
@@ -108,6 +178,19 @@ export class GameEngine {
         const doorKey = `${adjacentDoor.x},${adjacentDoor.y}`;
         const isOpen = doorStates.get(doorKey) ?? false;
         doorStates.set(doorKey, !isOpen);
+
+        // If we just CLOSED the door, push entities away
+        if (isOpen) { // was open, now closed
+          // Push player if on the door tile
+          this.pushEntityFromDoor(player, adjacentDoor.x, adjacentDoor.y, tileSize, dungeon, doorStates);
+
+          // Push all enemies if on the door tile
+          for (const enemy of enemies) {
+            if (enemy.alive) {
+              this.pushEntityFromDoor(enemy, adjacentDoor.x, adjacentDoor.y, tileSize, dungeon, doorStates);
+            }
+          }
+        }
       }
     }
     this.lastSpacePressed = spacePressed;
@@ -173,7 +256,8 @@ export class GameEngine {
     dungeon: TileType[][],
     roomMap: number[][],
     startCombat: (enemy: Enemy) => void,
-    inCombat: boolean
+    inCombat: boolean,
+    doorStates: Map<string, boolean>
   ) {
     for (const enemy of enemies) {
       enemy.update(
@@ -184,7 +268,8 @@ export class GameEngine {
         dungeon,
         roomMap,
         startCombat,
-        inCombat
+        inCombat,
+        doorStates
       );
     }
   }

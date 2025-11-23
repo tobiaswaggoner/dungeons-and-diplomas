@@ -228,6 +228,14 @@ export default function GameCanvas() {
             combatQuestion={combat.combatQuestion}
             combatFeedback={combat.combatFeedback}
             onAnswerQuestion={combat.answerQuestion}
+            player={gameState.playerRef.current}
+            dungeon={gameState.dungeonManagerRef.current?.dungeon}
+            roomMap={gameState.dungeonManagerRef.current?.roomMap}
+            rooms={gameState.dungeonManagerRef.current?.rooms}
+            renderMap={gameState.dungeonManagerRef.current?.renderMap}
+            doorStates={gameState.dungeonManagerRef.current?.doorStates}
+            darkTheme={gameState.dungeonManagerRef.current?.darkTheme}
+            tileSize={gameState.dungeonManagerRef.current?.tileSize}
           />
         )}
 

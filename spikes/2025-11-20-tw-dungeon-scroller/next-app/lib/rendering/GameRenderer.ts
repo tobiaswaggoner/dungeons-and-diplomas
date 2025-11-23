@@ -119,16 +119,44 @@ export class GameRenderer {
   }
 
   /**
-   * Get player's current room ID
+   * Get player's current room ID(s)
+   * Returns a Set because player might be on a door (adjacent to multiple rooms)
    */
-  private getPlayerRoomId(player: Player, tileSize: number, roomMap: number[][], dungeonWidth: number, dungeonHeight: number): number {
+  private getPlayerRoomIds(player: Player, tileSize: number, roomMap: number[][], dungeonWidth: number, dungeonHeight: number): Set<number> {
     const playerTileX = Math.floor((player.x + tileSize / 2) / tileSize);
     const playerTileY = Math.floor((player.y + tileSize / 2) / tileSize);
+    const roomIds = new Set<number>();
 
-    if (playerTileX >= 0 && playerTileX < dungeonWidth && playerTileY >= 0 && playerTileY < dungeonHeight) {
-      return roomMap[playerTileY][playerTileX];
+    if (playerTileX < 0 || playerTileX >= dungeonWidth || playerTileY < 0 || playerTileY >= dungeonHeight) {
+      return roomIds;
     }
-    return -1;
+
+    const directRoomId = roomMap[playerTileY][playerTileX];
+
+    // If player is in a valid room, just return that
+    if (directRoomId >= 0) {
+      roomIds.add(directRoomId);
+      return roomIds;
+    }
+
+    // Player is on a door/wall (roomId < 0) - find adjacent rooms
+    const directions = [
+      { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+      { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
+    ];
+
+    for (const { dx, dy } of directions) {
+      const nx = playerTileX + dx;
+      const ny = playerTileY + dy;
+      if (nx >= 0 && nx < dungeonWidth && ny >= 0 && ny < dungeonHeight) {
+        const neighborRoomId = roomMap[ny][nx];
+        if (neighborRoomId >= 0) {
+          roomIds.add(neighborRoomId);
+        }
+      }
+    }
+
+    return roomIds;
   }
 
   render(
@@ -272,8 +300,9 @@ export class GameRenderer {
       }
     }
 
-    // Get player's current room for enemy visibility and fog of war
-    const playerRoomId = this.getPlayerRoomId(player, tileSize, roomMap, dungeonWidth, dungeonHeight);
+    // Get player's current room(s) for enemy visibility and fog of war
+    // Returns a Set because player might be on a door (adjacent to multiple rooms)
+    const playerRoomIds = this.getPlayerRoomIds(player, tileSize, roomMap, dungeonWidth, dungeonHeight);
 
     // Fog of War: Dim visible rooms where player is NOT present
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
@@ -310,20 +339,20 @@ export class GameRenderer {
 
         if (!isVisible) continue;
 
-        // Dim tiles that are NOT in the player's current room
-        // For walls/doors (roomId < 0), dim if not adjacent to player's room
+        // Dim tiles that are NOT in the player's current room(s)
+        // For walls/doors (roomId < 0), dim if not adjacent to any player room
         let shouldDim = false;
         if (roomId >= 0) {
-          shouldDim = roomId !== playerRoomId;
+          shouldDim = !playerRoomIds.has(roomId);
         } else {
-          // Wall/door: dim if not adjacent to player's room
+          // Wall/door: dim if not adjacent to any of the player's rooms
           let adjacentToPlayerRoom = false;
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               const ny = y + dy;
               const nx = x + dx;
               if (ny >= 0 && ny < dungeonHeight && nx >= 0 && nx < dungeonWidth) {
-                if (roomMap[ny][nx] === playerRoomId) {
+                if (playerRoomIds.has(roomMap[ny][nx])) {
                   adjacentToPlayerRoom = true;
                   break;
                 }
@@ -340,9 +369,9 @@ export class GameRenderer {
       }
     }
 
-    // Draw enemies (only in player's current room)
+    // Draw enemies (only in player's current room(s))
     for (const enemy of enemies) {
-      enemy.draw(ctx, rooms, tileSize, player, playerRoomId);
+      enemy.draw(ctx, rooms, tileSize, player, playerRoomIds);
     }
 
     // Draw player

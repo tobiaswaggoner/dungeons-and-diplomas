@@ -127,12 +127,13 @@ export class CollisionDetector {
   }
 
   /**
-   * Check collision for enemies (includes doors as obstacles)
+   * Check collision for enemies (closed doors block, open doors allow passage)
    *
    * @param x X position in pixels
    * @param y Y position in pixels
    * @param tileSize Size of each tile in pixels
    * @param dungeon 2D array of tile types
+   * @param doorStates Map of door positions to open/closed state
    * @param entitySizeMultiplier Size multiplier for hitbox (default: PLAYER_SIZE)
    * @returns true if collision detected, false otherwise
    */
@@ -141,6 +142,7 @@ export class CollisionDetector {
     y: number,
     tileSize: number,
     dungeon: TileType[][],
+    doorStates: Map<string, boolean>,
     entitySizeMultiplier: number = PLAYER_SIZE
   ): boolean {
     // Calculate reduced hitbox size
@@ -170,11 +172,19 @@ export class CollisionDetector {
         return true;
       }
 
-      // Check tile type (walls, empty tiles, and DOORS block enemies)
-      if (dungeon[tileY][tileX] === TILE.WALL ||
-          dungeon[tileY][tileX] === TILE.EMPTY ||
-          dungeon[tileY][tileX] === TILE.DOOR) {
+      const tile = dungeon[tileY][tileX];
+
+      // Walls and empty tiles always block
+      if (tile === TILE.WALL || tile === TILE.EMPTY) {
         return true;
+      }
+
+      // Doors: block only if closed
+      if (tile === TILE.DOOR) {
+        const isOpen = doorStates.get(`${tileX},${tileY}`) ?? false;
+        if (!isOpen) {
+          return true;
+        }
       }
     }
 

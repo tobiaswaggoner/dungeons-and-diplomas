@@ -3,6 +3,7 @@ import { DIRECTION, ANIMATION, AI_STATE, ENEMY_SPEED_TILES, ENEMY_AGGRO_RADIUS, 
 import type { Direction, AIStateType, TileType, Room } from './constants';
 import { CollisionDetector } from './physics/CollisionDetector';
 import { DirectionCalculator } from './movement/DirectionCalculator';
+import { AStarPathfinder } from './pathfinding/AStarPathfinder';
 
 export interface Player {
   x: number;
@@ -37,6 +38,16 @@ export class Enemy {
   aiState: AIStateType = AI_STATE.IDLE;
   waypoint: { x: number; y: number } | null = null;
   idleTimer: number = 0;
+
+  // Pathfinding
+  path: { x: number; y: number }[] = [];
+  pathUpdateTimer: number = 0;
+  static readonly PATH_UPDATE_INTERVAL = 0.5; // Recalculate path every 0.5 seconds
+
+  // Aggro reaction time (prevents instant combat when entering a room)
+  aggroReactionTimer: number = 0;
+  static readonly AGGRO_REACTION_TIME = 0.1; // 0.1 seconds before combat can start
+  static readonly AGGRO_REACTION_TIME_DOOR = 2.0; // 2 seconds if player is standing in a door
 
   // Dynamic aggro radius based on player ELO
   playerElo: number = 5; // Default to middle ELO
@@ -139,7 +150,8 @@ export class Enemy {
     dungeon: TileType[][],
     roomMap: number[][],
     onCombatStart: (enemy: Enemy) => void,
-    inCombat: boolean
+    inCombat: boolean,
+    doorStates: Map<string, boolean>
   ) {
     if (!this.sprite) return;
 
@@ -155,24 +167,46 @@ export class Enemy {
     // Update room ID based on current position
     this.updateRoomId(tileSize, roomMap);
 
+    // Calculate player's room ID
+    const playerTileX = Math.floor((player.x + tileSize / 2) / tileSize);
+    const playerTileY = Math.floor((player.y + tileSize / 2) / tileSize);
+    const playerRoomId = (playerTileX >= 0 && playerTileX < DUNGEON_WIDTH &&
+                          playerTileY >= 0 && playerTileY < DUNGEON_HEIGHT)
+      ? roomMap[playerTileY][playerTileX]
+      : -1;
+
     // AI Logic
     const distanceToPlayer = this.getDistanceToPlayer(player, tileSize);
     const aggroRadius = this.getAggroRadius();
     const deaggroRadius = this.getDeaggroRadius();
+    const sameRoom = this.roomId === playerRoomId && this.roomId >= 0;
 
     // State transitions
     if (this.aiState === AI_STATE.FOLLOWING) {
-      // Deaggro if player is too far
+      // Deaggro if player is too far away
       if (distanceToPlayer > deaggroRadius) {
         this.aiState = AI_STATE.IDLE;
         this.idleTimer = ENEMY_IDLE_WAIT_TIME;
+        this.path = []; // Clear path when deaggro
       }
     } else {
-      // Aggro if player is close
-      if (distanceToPlayer <= aggroRadius) {
+      // Aggro only if player is in the SAME room AND close enough
+      if (sameRoom && distanceToPlayer <= aggroRadius) {
         this.aiState = AI_STATE.FOLLOWING;
         this.waypoint = null;
+        // Start reaction timer when first gaining aggro
+        // Longer reaction time if player is standing in a door
+        const playerTile = dungeon[playerTileY]?.[playerTileX];
+        const isPlayerInDoor = playerTile === TILE.DOOR;
+        this.aggroReactionTimer = isPlayerInDoor
+          ? Enemy.AGGRO_REACTION_TIME_DOOR
+          : Enemy.AGGRO_REACTION_TIME;
       }
+    }
+
+    // Count down aggro reaction timer while following
+    if (this.aiState === AI_STATE.FOLLOWING && this.aggroReactionTimer > 0) {
+      this.aggroReactionTimer -= dt;
     }
 
     // Execute behavior based on state
@@ -214,11 +248,11 @@ export class Enemy {
         const newX = this.x + moveX;
         const newY = this.y + moveY;
 
-        // Simple collision check
-        if (!this.checkCollision(newX, this.y, tileSize, dungeon)) {
+        // Simple collision check (with door states)
+        if (!this.checkCollision(newX, this.y, tileSize, dungeon, doorStates)) {
           this.x = newX;
         }
-        if (!this.checkCollision(this.x, newY, tileSize, dungeon)) {
+        if (!this.checkCollision(this.x, newY, tileSize, dungeon, doorStates)) {
           this.y = newY;
         }
 
@@ -229,37 +263,94 @@ export class Enemy {
       }
 
     } else if (this.aiState === AI_STATE.FOLLOWING) {
-      // Chase the player
-      const dx = (player.x + tileSize / 2) - (this.x + tileSize / 2);
-      const dy = (player.y + tileSize / 2) - (this.y + tileSize / 2);
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      // Chase the player using A* pathfinding
+      const distanceToPlayer = this.getDistanceToPlayer(player, tileSize);
 
-      if (distance > tileSize * COMBAT_TRIGGER_DISTANCE) {
-        // Move towards player (with level-based speed scaling)
-        const speedMultiplier = this.getSpeedMultiplier();
-        const speed = ENEMY_SPEED_TILES * tileSize * dt * speedMultiplier;
-        const moveX = (dx / distance) * speed;
-        const moveY = (dy / distance) * speed;
+      if (distanceToPlayer > COMBAT_TRIGGER_DISTANCE) {
+        // Update path periodically
+        this.pathUpdateTimer -= dt;
+        if (this.pathUpdateTimer <= 0 || this.path.length === 0) {
+          this.pathUpdateTimer = Enemy.PATH_UPDATE_INTERVAL;
 
-        const newX = this.x + moveX;
-        const newY = this.y + moveY;
+          // Calculate path from enemy to player
+          const enemyTileX = Math.floor((this.x + tileSize / 2) / tileSize);
+          const enemyTileY = Math.floor((this.y + tileSize / 2) / tileSize);
+          const playerTileX = Math.floor((player.x + tileSize / 2) / tileSize);
+          const playerTileY = Math.floor((player.y + tileSize / 2) / tileSize);
 
-        // Simple collision check
-        if (!this.checkCollision(newX, this.y, tileSize, dungeon)) {
-          this.x = newX;
+          this.path = AStarPathfinder.findPath(
+            enemyTileX, enemyTileY,
+            playerTileX, playerTileY,
+            dungeon, doorStates
+          );
         }
-        if (!this.checkCollision(this.x, newY, tileSize, dungeon)) {
-          this.y = newY;
+
+        // Follow the path
+        if (this.path.length > 0) {
+          const nextTile = this.path[0];
+          const targetX = nextTile.x * tileSize;
+          const targetY = nextTile.y * tileSize;
+
+          const dx = targetX - this.x;
+          const dy = targetY - this.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < ENEMY_WAYPOINT_THRESHOLD) {
+            // Reached waypoint, move to next
+            this.path.shift();
+          } else {
+            // Move towards waypoint
+            const speedMultiplier = this.getSpeedMultiplier();
+            const speed = ENEMY_SPEED_TILES * tileSize * dt * speedMultiplier;
+            const moveX = (dx / distance) * speed;
+            const moveY = (dy / distance) * speed;
+
+            const newX = this.x + moveX;
+            const newY = this.y + moveY;
+
+            // Collision check (with door states)
+            if (!this.checkCollision(newX, this.y, tileSize, dungeon, doorStates)) {
+              this.x = newX;
+            }
+            if (!this.checkCollision(this.x, newY, tileSize, dungeon, doorStates)) {
+              this.y = newY;
+            }
+
+            // Update direction based on movement
+            this.direction = DirectionCalculator.calculateDirection(dx, dy);
+          }
+
+          this.sprite.playAnimation(this.direction, ANIMATION.RUN);
+        } else {
+          // No path found - fallback to direct movement
+          const dx = (player.x + tileSize / 2) - (this.x + tileSize / 2);
+          const dy = (player.y + tileSize / 2) - (this.y + tileSize / 2);
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance > 0) {
+            const speedMultiplier = this.getSpeedMultiplier();
+            const speed = ENEMY_SPEED_TILES * tileSize * dt * speedMultiplier;
+            const moveX = (dx / distance) * speed;
+            const moveY = (dy / distance) * speed;
+
+            const newX = this.x + moveX;
+            const newY = this.y + moveY;
+
+            if (!this.checkCollision(newX, this.y, tileSize, dungeon, doorStates)) {
+              this.x = newX;
+            }
+            if (!this.checkCollision(this.x, newY, tileSize, dungeon, doorStates)) {
+              this.y = newY;
+            }
+
+            this.direction = DirectionCalculator.calculateDirection(dx, dy);
+          }
+
+          this.sprite.playAnimation(this.direction, ANIMATION.RUN);
         }
-
-        // Update direction
-        this.direction = DirectionCalculator.calculateDirection(dx, dy);
-
-        this.sprite.playAnimation(this.direction, ANIMATION.RUN);
       } else {
-        // Close enough - start combat!
-        // Only start combat if enemy is alive and not already in combat
-        if (!inCombat && this.alive) {
+        // Close enough - start combat (but only after reaction time has passed)
+        if (!inCombat && this.alive && this.aggroReactionTimer <= 0) {
           onCombatStart(this);
         }
         this.sprite.playAnimation(this.direction, ANIMATION.IDLE);
@@ -284,12 +375,12 @@ export class Enemy {
     }
   }
 
-  checkCollision(x: number, y: number, tileSize: number, dungeon: TileType[][]): boolean {
-    // Enemies use special collision that includes doors
-    return CollisionDetector.checkEnemyCollision(x, y, tileSize, dungeon);
+  checkCollision(x: number, y: number, tileSize: number, dungeon: TileType[][], doorStates: Map<string, boolean>): boolean {
+    // Enemies use collision that respects door states
+    return CollisionDetector.checkEnemyCollision(x, y, tileSize, dungeon, doorStates);
   }
 
-  draw(ctx: CanvasRenderingContext2D, rooms: Room[], tileSize: number, player?: Player, playerRoomId?: number) {
+  draw(ctx: CanvasRenderingContext2D, rooms: Room[], tileSize: number, player?: Player, playerRoomIds?: Set<number>) {
     if (!this.sprite || !this.sprite.loaded) return;
 
     // Only draw if the enemy's room is visible
@@ -297,8 +388,11 @@ export class Enemy {
       return;
     }
 
-    // Only draw enemies in the player's current room
-    if (playerRoomId !== undefined && this.roomId !== playerRoomId) {
+    // Only show aggro visuals after reaction timer has elapsed
+    const hasAggro = this.aiState === AI_STATE.FOLLOWING && this.aggroReactionTimer <= 0;
+
+    // Only draw enemies in the player's current room(s) OR if they have aggro
+    if (playerRoomIds !== undefined && playerRoomIds.size > 0 && !playerRoomIds.has(this.roomId) && !hasAggro) {
       return;
     }
 
@@ -359,31 +453,45 @@ export class Enemy {
     }
 
     ctx.save();
-    ctx.font = '12px Arial';
+
+    // Larger font and padding when enemy has aggro
+    const fontSize = hasAggro ? 14 : 12;
+    const padding = hasAggro ? 10 : 6;
+    ctx.font = `${hasAggro ? 'bold ' : ''}${fontSize}px Arial`;
     ctx.textAlign = 'center';
 
     // Measure text width
     const textWidth = ctx.measureText(statusText).width;
-    const padding = 6;
     const barWidth = textWidth + padding * 2;
-    const barHeight = 20;
+    const barHeight = hasAggro ? 26 : 20;
 
     // Position bar above the scaled sprite (centered on tile, but above scaled height)
     const barX = this.x + tileSize / 2 - barWidth / 2;
     const barY = offsetY - barHeight - 4;
 
+    // Draw red glow effect when enemy has aggro
+    if (hasAggro && this.alive) {
+      ctx.shadowColor = '#FF0000';
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    }
+
     // Draw background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillStyle = hasAggro && this.alive ? 'rgba(40, 0, 0, 0.85)' : 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(barX, barY, barWidth, barHeight);
 
-    // Draw border with level-based color
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = 1;
+    // Draw border with level-based color (or red when aggro)
+    ctx.strokeStyle = hasAggro && this.alive ? '#FF4444' : borderColor;
+    ctx.lineWidth = hasAggro ? 2 : 1;
     ctx.strokeRect(barX, barY, barWidth, barHeight);
 
-    // Draw text with level-based color
-    ctx.fillStyle = borderColor;
-    ctx.fillText(statusText, this.x + tileSize / 2, barY + 14);
+    // Reset shadow for text
+    ctx.shadowBlur = 0;
+
+    // Draw text with level-based color (or red when aggro)
+    ctx.fillStyle = hasAggro && this.alive ? '#FF6666' : borderColor;
+    ctx.fillText(statusText, this.x + tileSize / 2, barY + (hasAggro ? 18 : 14));
 
     ctx.restore();
   }

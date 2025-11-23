@@ -1,6 +1,8 @@
 import { PLAYER_MAX_HP, COMBAT_TIME_LIMIT, GOBLIN_MAX_HP } from '@/lib/constants';
+import type { TileType, Room } from '@/lib/constants';
 import type { Question } from '@/lib/questions';
-import type { Enemy } from '@/lib/Enemy';
+import type { Enemy, Player } from '@/lib/Enemy';
+import type { RenderMap, TileTheme } from '@/lib/tiletheme/types';
 import DungeonView from './combat/DungeonView';
 import CharacterSprite from './combat/CharacterSprite';
 import HPBar from './combat/HPBar';
@@ -14,6 +16,15 @@ interface CombatModalProps {
   combatQuestion: (Question & { shuffledAnswers: string[]; correctIndex: number; elo: number | null }) | null;
   combatFeedback: string;
   onAnswerQuestion: (index: number) => void;
+  // Dungeon data for background rendering
+  player?: Player;
+  dungeon?: TileType[][];
+  roomMap?: number[][];
+  rooms?: Room[];
+  renderMap?: RenderMap | null;
+  doorStates?: Map<string, boolean>;
+  darkTheme?: TileTheme | null;
+  tileSize?: number;
 }
 
 export default function CombatModal({
@@ -24,7 +35,15 @@ export default function CombatModal({
   combatTimer,
   combatQuestion,
   combatFeedback,
-  onAnswerQuestion
+  onAnswerQuestion,
+  player,
+  dungeon,
+  roomMap,
+  rooms,
+  renderMap,
+  doorStates,
+  darkTheme,
+  tileSize
 }: CombatModalProps) {
   // Determine difficulty color based on enemy level
   let borderColor = '#4CAF50';
@@ -49,11 +68,15 @@ export default function CombatModal({
   const isCorrectAnswer = combatFeedback.startsWith('✓');
   const isWrongAnswer = combatFeedback.startsWith('✗');
 
-  const isPlayerAttacking = isCorrectAnswer && !isEnemyDead;
+  // Attack animations continue even during death (for the killing blow)
+  const isPlayerAttacking = isCorrectAnswer;
   const isEnemyHurt = isCorrectAnswer && enemyHp > 0;
 
-  const isEnemyAttacking = isWrongAnswer && !isPlayerDead;
+  const isEnemyAttacking = isWrongAnswer;
   const isPlayerHurt = isWrongAnswer && playerHp > 0;
+
+  // Hide questions during combat animations (including death)
+  const isCombatAnimating = isPlayerAttacking || isEnemyHurt || isEnemyAttacking || isPlayerHurt || isPlayerDead || isEnemyDead;
 
   return (
     <>
@@ -67,6 +90,16 @@ export default function CombatModal({
             opacity: 0.3;
             color: #FF8888;
           }
+        }
+
+        @keyframes fadeOut {
+          from { opacity: 1; transform: translateY(0); }
+          to { opacity: 0; transform: translateY(-20px); }
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-20px); }
+          to { opacity: 1; transform: translateY(0); }
         }
 
         .wood-texture {
@@ -112,7 +145,18 @@ export default function CombatModal({
         zIndex: 200
       }}>
         {/* Dungeon Background - Full Screen */}
-        <DungeonView isPlayerAttacking={isPlayerAttacking} isEnemyHurt={isEnemyHurt} />
+        <DungeonView
+          isPlayerAttacking={isPlayerAttacking}
+          isEnemyHurt={isEnemyHurt}
+          player={player}
+          dungeon={dungeon}
+          roomMap={roomMap}
+          rooms={rooms}
+          renderMap={renderMap}
+          doorStates={doorStates}
+          darkTheme={darkTheme}
+          tileSize={tileSize}
+        />
 
         {/* Characters */}
         <CharacterSprite
@@ -132,7 +176,8 @@ export default function CombatModal({
         <div style={{
           position: 'absolute',
           bottom: '140px',
-          left: '120px',
+          left: '35%',
+          transform: 'translateX(-50%)',
           zIndex: 15
         }}>
           <HPBar current={playerHp} max={PLAYER_MAX_HP} color="#00ff00" label="SPIELER" />
@@ -141,7 +186,8 @@ export default function CombatModal({
         <div style={{
           position: 'absolute',
           bottom: '140px',
-          right: '120px',
+          right: '35%',
+          transform: 'translateX(50%)',
           zIndex: 15
         }}>
           <HPBar
@@ -249,7 +295,10 @@ export default function CombatModal({
             transform: 'translateX(-50%)',
             width: '90%',
             maxWidth: '900px',
-            zIndex: 20
+            zIndex: 20,
+            opacity: isCombatAnimating ? 0 : 1,
+            transition: 'opacity 0.3s ease, transform 0.3s ease',
+            pointerEvents: isCombatAnimating ? 'none' : 'auto'
           }}>
             {/* Hanging Chains */}
             <div style={{
@@ -324,7 +373,10 @@ export default function CombatModal({
             display: 'flex',
             flexDirection: 'column',
             gap: '20px',
-            zIndex: 20
+            zIndex: 20,
+            opacity: isCombatAnimating ? 0 : 1,
+            transition: 'opacity 0.3s ease',
+            pointerEvents: isCombatAnimating ? 'none' : 'auto'
           }}>
             {combatQuestion.shuffledAnswers.map((answer, index) => (
               <button

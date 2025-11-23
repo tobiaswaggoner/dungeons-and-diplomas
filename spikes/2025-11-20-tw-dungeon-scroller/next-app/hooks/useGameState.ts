@@ -139,6 +139,7 @@ export function useGameState({
       manager.playerSprite,
       inCombatRef.current,
       manager.doorStates,
+      manager.enemies,
       manager.treasures,
       handleTreasureCollected
     );
@@ -152,7 +153,8 @@ export function useGameState({
       manager.dungeon,
       manager.roomMap,
       startCombatRef.current,
-      inCombatRef.current
+      inCombatRef.current,
+      manager.doorStates
     );
   };
 
@@ -278,6 +280,7 @@ export function useGameState({
     playerRef,
     inCombatRef,
     startCombatRef,
-    generateNewDungeon
+    generateNewDungeon,
+    dungeonManagerRef
   };
 }
