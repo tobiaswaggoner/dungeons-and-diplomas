@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { TILE, TILE_SOURCE_SIZE } from '@/lib/constants';
 import type { TileType, Room } from '@/lib/constants';
 import type { Player } from '@/lib/enemy';
@@ -8,8 +8,9 @@ import type { RenderMap, TileTheme, TileVariant, WallType } from '@/lib/tilethem
 import { WALL_TYPE } from '@/lib/tiletheme/types';
 import { getThemeRenderer } from '@/lib/tiletheme/ThemeRenderer';
 import { detectDoorType } from '@/lib/tiletheme/WallTypeDetector';
-import { ThemeLoader } from '@/lib/tiletheme/ThemeLoader';
 import { VisibilityCalculator } from '@/lib/visibility';
+import { useFallbackTheme } from '@/hooks/useFallbackTheme';
+import Torch from './Torch';
 
 interface DungeonViewProps {
   isPlayerAttacking?: boolean;
@@ -29,8 +30,6 @@ interface DungeonViewProps {
 const ZOOM_FACTOR = 3;
 
 export default function DungeonView({
-  isPlayerAttacking,
-  isEnemyHurt,
   player,
   dungeon,
   roomMap,
@@ -41,29 +40,12 @@ export default function DungeonView({
   tileSize = 64
 }: DungeonViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [fallbackThemeLoaded, setFallbackThemeLoaded] = useState(false);
-  const fallbackThemeRef = useRef<TileTheme | null>(null);
 
   // Check if we have real dungeon data
   const hasRealDungeonData = !!(player && dungeon && renderMap && darkTheme);
 
-  // Load fallback theme only if no real dungeon data (using ThemeLoader)
-  useEffect(() => {
-    if (hasRealDungeonData) return;
-
-    const loadFallbackTheme = async () => {
-      const result = await ThemeLoader.loadTheme(1);
-
-      if (result) {
-        fallbackThemeRef.current = result.theme;
-        setFallbackThemeLoaded(true);
-      } else {
-        console.warn('Failed to load fallback theme for combat view');
-      }
-    };
-
-    loadFallbackTheme();
-  }, [hasRealDungeonData]);
+  // Load fallback theme only if no real dungeon data
+  const { theme: fallbackTheme, isLoaded: fallbackThemeLoaded } = useFallbackTheme(hasRealDungeonData);
 
   // Render with real dungeon data (zoomed in on player)
   useEffect(() => {
@@ -214,7 +196,7 @@ export default function DungeonView({
 
   // Fallback rendering (static arena) when no real data
   useEffect(() => {
-    if (hasRealDungeonData || !fallbackThemeLoaded || !fallbackThemeRef.current) return;
+    if (hasRealDungeonData || !fallbackThemeLoaded || !fallbackTheme) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -222,7 +204,6 @@ export default function DungeonView({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const theme = fallbackThemeRef.current;
     const renderer = getThemeRenderer();
 
     canvas.width = canvas.offsetWidth;
@@ -254,13 +235,13 @@ export default function DungeonView({
     };
 
     const getWallVariants = (wallType: WallType): TileVariant[] | undefined => {
-      return theme.wall[wallType];
+      return fallbackTheme.wall[wallType];
     };
 
     // Draw floor tiles
     for (let y = 0; y < tilesY; y++) {
       for (let x = 0; x < tilesX; x++) {
-        drawTileVariant(theme.floor.default, x, y);
+        drawTileVariant(fallbackTheme.floor.default, x, y);
       }
     }
 
@@ -294,7 +275,7 @@ export default function DungeonView({
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
 
-  }, [hasRealDungeonData, fallbackThemeLoaded]);
+  }, [hasRealDungeonData, fallbackThemeLoaded, fallbackTheme]);
 
   return (
     <div style={{
@@ -321,59 +302,6 @@ export default function DungeonView({
       {/* Torches */}
       <Torch left={100} top={50} />
       <Torch left={typeof window !== 'undefined' ? window.innerWidth - 130 : 800} top={50} />
-    </div>
-  );
-}
-
-// Torch component with inline styles
-function Torch({ left, top }: { left: number; top: number }) {
-  return (
-    <div style={{
-      position: 'absolute',
-      left: `${left}px`,
-      top: `${top}px`,
-      width: '40px',
-      height: '80px',
-      zIndex: 5
-    }}>
-      {/* Torch Flame */}
-      <div style={{
-        width: '40px',
-        height: '45px',
-        background: 'radial-gradient(ellipse at center, #ffff00 0%, #ffcc00 30%, #ff9933 60%, #ff6600 100%)',
-        borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
-        animation: 'torchFlicker 0.5s ease-in-out infinite',
-        position: 'relative',
-        top: '-10px',
-        boxShadow: '0 0 25px rgba(255, 153, 51, 0.7), 0 0 50px rgba(255, 102, 0, 0.5)',
-        filter: 'blur(1px)'
-      }}>
-        <div style={{
-          position: 'absolute',
-          top: '7px',
-          left: '7px',
-          right: '7px',
-          bottom: '7px',
-          background: 'radial-gradient(ellipse at center, rgba(255, 255, 255, 0.8) 0%, transparent 70%)',
-          borderRadius: '50%'
-        }} />
-      </div>
-
-      {/* Torch Stick */}
-      <div style={{
-        width: '12px',
-        height: '55px',
-        backgroundColor: '#8b4513',
-        margin: '0 auto',
-        borderRadius: '3px'
-      }} />
-
-      <style jsx>{`
-        @keyframes torchFlicker {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.8; }
-        }
-      `}</style>
     </div>
   );
 }

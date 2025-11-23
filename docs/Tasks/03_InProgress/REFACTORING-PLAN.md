@@ -9,10 +9,10 @@
 - [R07] Enemy-AI Pathfinder injizierbar machen ✅
 - [R10] Zentrales Error-Handling für Hooks ✅
 
-**Sprint 2 (Komponenten-Aufspaltung) - IN BEARBEITUNG**
+**Sprint 2 (Komponenten-Aufspaltung) - ABGESCHLOSSEN ✅**
 - [R04] SkillDashboard Component modularisieren ✅
-- [R02] useCombat Hook aufteilen
-- [R03] DungeonView Component aufteilen
+- [R02] useCombat Hook aufteilen ✅ (via Combat Reducer Pattern in R06)
+- [R03] DungeonView Component aufteilen ✅
 
 **Sprint 3 (Komplexe Refactorings) - OFFEN**
 - [R08] useTilemapEditorState Hook aufteilen
