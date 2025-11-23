@@ -214,38 +214,32 @@ components/
 
 ---
 
-### [R09] DungeonManager-Verantwortlichkeiten trennen
+### [R09] ✅ DungeonManager-Verantwortlichkeiten trennen - ERLEDIGT
 
-**Problem:** `DungeonManager.ts` (299 Zeilen) ist für Generation, Theme-Loading, Enemy-Spawning, Treasure-Placement und State-Management verantwortlich.
+**Problem:** `DungeonManager.ts` (290 Zeilen) war für Generation, Theme-Loading, Enemy-Spawning, Treasure-Placement und State-Management verantwortlich.
 
-**Betroffene Dateien:**
-- `lib/game/DungeonManager.ts:1-299` - Gesamte Klasse
+**Abgeschlossen:** 2025-11-23
 
-**Lösung:** Verantwortlichkeiten aufteilen.
+**Änderungen:**
+- ✅ `lib/game/DungeonInitializer.ts` erstellt (105 Zeilen) - Dungeon-Strukturgenerierung
+  - `generateDungeonStructure()` - Pure function für komplette Dungeon-Generierung
+  - `DungeonStructure` Interface für typsichere Rückgabe
+- ✅ `lib/game/EntitySpawner.ts` erstellt (170 Zeilen) - Entity-Spawning
+  - `spawnPlayer()` - Player-Platzierung mit Sichtbarkeit
+  - `spawnEnemies()` - ELO-basiertes Enemy-Spawning
+  - `spawnTreasures()` - Treasure-Platzierung in Treasure-Räumen
+- ✅ `lib/game/DungeonManager.ts` refaktoriert (136 Zeilen, von 290 Zeilen)
+  - Nutzt DungeonInitializer und EntitySpawner
+  - Theme-Loading bereits via ThemeLoader (R03)
 
+**Neue Struktur:**
 ```
 lib/game/
-├── DungeonManager.ts       (100 Zeilen) - State & Koordination
-├── DungeonInitializer.ts   (80 Zeilen) - Dungeon-Generierung
-├── EntitySpawner.ts        (80 Zeilen) - Enemy/Treasure-Spawning
-└── ThemeManager.ts         (80 Zeilen) - Theme-Handling
+├── DungeonManager.ts       (136 Zeilen) - State & Koordination
+├── DungeonInitializer.ts   (105 Zeilen) - Dungeon-Strukturgenerierung
+├── EntitySpawner.ts        (170 Zeilen) - Entity-Spawning
+└── GameEngine.ts           (existierend) - Game-Loop
 ```
-
-**Aufwand:** L | **Risiko:** hoch
-
-**Schritte:**
-1. Interface `IDungeonState` definieren
-2. `DungeonInitializer` mit Generierungs-Logik erstellen
-3. `EntitySpawner` mit Spawning-Logik erstellen
-4. DungeonManager auf neue Module umstellen
-5. Umfassende Tests für alle Module
-
-**Abhängigkeiten:** R03 (ThemeLoader) sollte vorher abgeschlossen sein.
-
-**Temporäre Tests:**
-- Test: Dungeon-Generierung produziert valide Dungeons
-- Test: Entity-Spawning platziert Entities in korrekten Räumen
-- Test: Theme-Loading lädt alle erforderlichen Tilesets
 
 ---
 
@@ -307,11 +301,11 @@ R10 (tiletheme/db)  ────────────────────
 5. **R03** - ✅ ThemeLoader - ERLEDIGT 2025-11-23
 6. **R04** - ✅ CombatEngine - ERLEDIGT 2025-11-23
 
-### Phase 3: Größere Refactorings (5-7 Tage)
+### Phase 3: Größere Refactorings (5-7 Tage) ✅ ABGESCHLOSSEN
 7. **R07** - ✅ EnemyAI-Module - ERLEDIGT 2025-11-23
 8. **R08** - ✅ CharacterPanel-Subkomponenten - ERLEDIGT 2025-11-23
 9. **R10** - ✅ tiletheme/db aufteilen - ERLEDIGT 2025-11-23
-10. **R09** - DungeonManager-Trennung (6h) ⚠️ Höchstes Risiko
+10. **R09** - ✅ DungeonManager-Trennung - ERLEDIGT 2025-11-23
 
 ---
 
@@ -328,7 +322,7 @@ R10 (tiletheme/db)  ────────────────────
 
 **Erstellt:** 2025-11-23
 **Autor:** Claude Code Analyse
-**Status:** Phase 3 in Bearbeitung (R07 abgeschlossen)
+**Status:** ✅ ALLE REFACTORINGS ABGESCHLOSSEN
 
 ## Änderungshistorie
 
@@ -339,3 +333,4 @@ R10 (tiletheme/db)  ────────────────────
 | 2025-11-23 | Phase 3 | R07 abgeschlossen - EnemyAI in 3 Module aufgeteilt |
 | 2025-11-23 | Phase 3 | R08 abgeschlossen - CharacterPanel in 4 Subkomponenten aufgeteilt |
 | 2025-11-23 | Phase 3 | R10 abgeschlossen - tiletheme/db in 4 CRUD-Module aufgeteilt |
+| 2025-11-23 | Phase 3 | R09 abgeschlossen - DungeonManager in 2 Module aufgeteilt - **ALLE REFACTORINGS KOMPLETT!** |
