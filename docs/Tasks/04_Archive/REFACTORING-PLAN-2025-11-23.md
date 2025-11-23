@@ -2,302 +2,291 @@
 
 ## Zusammenfassung
 
-Die Codebasis zeigt typische Symptome organischen Wachstums: Duplizierter Code für API-Aufrufe, God-Files mit gemischten Verantwortlichkeiten, und manuelle State-Synchronisation zwischen Hooks. Die Architektur ist grundsätzlich solide (klare Hook-Trennung, gute Ordnerstruktur), aber es fehlen Abstraktionsschichten für API und gemeinsamen State.
+Die Codebasis ist grundsätzlich gut strukturiert mit klarer Trennung zwischen API-Layer, Hooks, und Library-Modulen. Es existieren jedoch mehrere "God Files" in den Hooks (useGameState: 304 Zeilen, useCombat: 261 Zeilen, useTilemapEditorState: 317 Zeilen) und im Rendering-Layer (GameRenderer: 351 Zeilen), die mehrere Verantwortlichkeiten vermischen. Die Testbarkeit ist durch direkte Abhängigkeiten zu Browser-APIs (localStorage, fetch, Canvas) und fehlende Dependency Injection eingeschränkt.
 
 ## Architektur-Snapshot
 
 ```
 next-app/
-├── app/api/          # 19 API-Routes (inkonsistente Patterns)
-├── components/       # 25 Komponenten (teils große Inline-Styles)
-├── hooks/            # 6 Hooks (Ref-Synchronisation, duplizierte fetches)
-└── lib/
-    ├── db.ts         # GOD-FILE: 682 Zeilen (Users, Questions, Answers, XP, Levels)
-    ├── Enemy.ts      # 499 Zeilen (AI, Rendering, Combat gemischt)
-    ├── game/         # GameEngine + DungeonManager
-    ├── combat/       # Gute Separation (QuestionSelector, DamageCalculator)
-    ├── scoring/      # Gute Separation (EloCalculator, LevelCalculator)
-    └── rendering/    # GameRenderer (383 Zeilen, könnte aufgeteilt werden)
+├── app/                    # Next.js App Router + API Routes (~750 Zeilen)
+│   └── api/               # REST Endpoints - gut strukturiert
+├── components/            # React Components (~5.400 Zeilen, 35 Dateien)
+│   ├── character/        # Character Panel Subkomponenten (306 Zeilen)
+│   ├── combat/           # Combat UI (1.359 Zeilen, 9 Dateien)
+│   ├── editor/           # Dungeon Editor UI (737 Zeilen)
+│   └── tilemapeditor/    # Tilemap Editor (1.374 Zeilen)
+├── hooks/                 # Custom Hooks (~1.330 Zeilen, 7 Dateien)
+│   ├── useGameState.ts   # GOD HOOK - 304 Zeilen - Game Loop Orchestrierung
+│   ├── useCombat.ts      # GOD HOOK - 261 Zeilen - Combat State Machine + API
+│   └── useTilemapEditorState.ts # GOD HOOK - 317 Zeilen - Editor State
+└── lib/                   # Business Logic (~7.550 Zeilen, 50+ Dateien)
+    ├── rendering/        # GameRenderer (351), EditorRenderer (233)
+    ├── game/             # GameEngine (264), DungeonManager (136)
+    ├── enemy/            # Enemy.ts, EnemyAI.ts (202)
+    ├── combat/           # CombatEngine (112) - gut refactored!
+    ├── spawning/         # LevelDistribution (268) - GOD FILE
+    └── db/               # Database Operations
 ```
 
-**Datenfluss-Problem:**
-```
-useCombat ──fetch──> /api/session-elo
-useScoring ─fetch──> /api/session-elo   (DUPLIKAT)
-DungeonManager fetch> /api/session-elo  (DUPLIKAT)
-GameCanvas ─fetch──> /api/questions
-GameCanvas ─fetch──> /api/subjects
-```
+**Datenfluss:** User → GameCanvas → useGameState → GameEngine → DungeonManager → Rendering
 
----
+**Positive Aspekte:**
+- Combat-System gut refaktoriert (CombatEngine, QuestionSelector, AnswerShuffler)
+- API-Client-Layer sauber abstrahiert
+- Utility-Module gut extrahiert (DirectionCalculator, CollisionDetector, VisibilityCalculator)
+- DungeonManager bereits in fokussierte Module aufgeteilt
 
 ## Identifizierte Refactorings
 
-### ✅ [R01] API-Service Layer extrahieren (ERLEDIGT 2025-11-23)
-**Problem:** fetch-Calls sind über 6+ Dateien verstreut mit identischem Error-Handling-Pattern. Keine zentrale Stelle für API-Logik. Erschwert Mocking für Tests.
+### [R01] ✅ GameRenderer Brightness-Logik extrahieren - ERLEDIGT
+**Problem:** GameRenderer.ts (351 Zeilen) enthält komplexe `shouldUseBrightTileset()` Logik (Zeilen 53-113) die mit Room-Clearance, Enemy-Checking und Neighbor-Berechnung zu tun hat - nicht mit Rendering.
 
-**Betroffene Dateien:**
-- `hooks/useCombat.ts:72-82, 147-167, 212-222` - 3 fetch-Calls
-- `hooks/useScoring.ts:17, 46` - 2 fetch-Calls
-- `lib/game/DungeonManager.ts:83-106, 252` - 2 fetch-Calls
-- `components/GameCanvas.tsx:37-53, 69-82` - 3 fetch-Calls
+**Abgeschlossen:** 2025-11-23
 
-**Lösung:** Neues Modul `lib/api/` mit typisiertem API-Client:
-```typescript
-// lib/api/client.ts
-export const api = {
-  elo: { getSessionElo: (userId: number) => ... },
-  questions: { getAll: () => ..., getWithElo: (subject, userId) => ... },
-  answers: { log: (entry: AnswerLogEntry) => ... },
-  xp: { add: (entry: XpLogEntry) => ... }
-};
+**Änderungen:**
+- ✅ `lib/rendering/BrightnessCalculator.ts` erstellt mit:
+  - `hasEnemiesInRoom()` - Enemy-Checking
+  - `getSpatialNeighbors()` - Room-Neighbor-Logik
+  - `isRoomClear()` - Room-State-Prüfung
+  - `shouldUseBrightTileset()` - Brightness-Berechnung
+  - `getAdjacentRoomIds()` - Helper für Nachbar-Räume
+- ✅ `lib/rendering/GameRenderer.ts` - Nutzt nun BrightnessCalculator (von 351 auf ~250 Zeilen reduziert)
+
+---
+
+### [R02] ✅ useGameState in fokussierte Sub-Hooks aufteilen - ERLEDIGT
+**Problem:** useGameState.ts (304 Zeilen) verwaltet Game Loop, Player Movement, Enemy Updates, Treasure Collection, Window Events und Canvas Initialization in einem Hook.
+
+**Abgeschlossen:** 2025-11-23
+
+**Änderungen:**
+- ✅ `hooks/useKeyboardInput.ts` erstellt mit:
+  - Keyboard State Management für WASD/Arrow Keys
+  - EventTarget-Injection für Testbarkeit (nutzt GameEventTarget)
+- ✅ `hooks/useTreasureCollection.ts` erstellt mit:
+  - handleTreasureCollected + XP API Call
+  - Screen Position Calculation für Popup-Bubbles
+- ✅ `hooks/useGameState.ts` refaktoriert:
+  - Importiert und orchestriert useKeyboardInput und useTreasureCollection
+  - Von 304 auf 243 Zeilen reduziert
+
+---
+
+### [R03] ✅ localStorage Abstraktion für Testbarkeit - ERLEDIGT
+**Problem:** useAuth.ts greift direkt auf `localStorage` zu (Zeilen 15-16, 40-41). Tests in Node.js-Umgebung schlagen fehl.
+
+**Abgeschlossen:** 2025-11-23
+
+**Änderungen:**
+- ✅ `lib/storage/StorageService.ts` erstellt mit:
+  - `StorageService` Interface: `get()`, `set()`, `remove()`
+  - `LocalStorageService` - Default-Implementation für Browser
+  - `InMemoryStorageService` - In-Memory für Tests mit `clear()` und `keys()`
+  - `defaultStorage` - Export der Default-Instance
+- ✅ `lib/storage/index.ts` erstellt für Re-exports
+- ✅ `hooks/useAuth.ts` refaktoriert:
+  - Neues `UseAuthOptions` Interface mit optionalem `storage` Parameter
+  - Nutzt `storage.get()`, `storage.remove()` statt direktem localStorage
+
+---
+
+### [R04] ✅ constants.ts aufteilen - ERLEDIGT
+**Problem:** constants.ts (234 Zeilen) vermischt numerische Konstanten, Type-Definitionen, Enums, und Sprite-Konfiguration.
+
+**Abgeschlossen:** 2025-11-23
+
+**Änderungen:**
+- ✅ `lib/enums.ts` erstellt mit:
+  - `TILE`, `DIRECTION`, `DIRECTION_OFFSETS`, `ANIMATION`, `AI_STATE`, `DUNGEON_ALGORITHM`
+  - Abgeleitete Types: `Direction`, `AnimationType`, `TileType`, `AIStateType`, `DungeonAlgorithm`
+- ✅ `lib/spriteConfig.ts` erstellt mit:
+  - `ANIM_SPEEDS` - Animation-Geschwindigkeiten
+  - `SPRITESHEET_CONFIGS` - Player/Goblin Sprite-Definitionen
+  - `TILE_SOURCE_SIZE`, `TILESET_COORDS`, `WALL_VARIANTS`, `FLOOR_VARIANTS`
+  - `AnimationDefinition`, `SpritesheetConfig` Interfaces
+- ✅ `lib/constants.ts` refaktoriert:
+  - Re-exports aller Enums und Sprite-Configs für Abwärtskompatibilität
+  - Nur noch Game-Constants (DUNGEON_WIDTH, PLAYER_SPEED, etc.) und Type-Definitionen
+  - Von 234 auf ~115 Zeilen reduziert
+
+---
+
+### [R05] ✅ Date.now() Injection in useCombat - ERLEDIGT
+**Problem:** useCombat.ts verwendet `Date.now()` direkt (Zeilen 122, 138) für Answer-Timing. Dies verhindert deterministische Tests.
+
+**Abgeschlossen:** 2025-11-23
+
+**Änderungen:**
+- ✅ `lib/time/Clock.ts` erstellt mit:
+  - `Clock` Interface: `{ now(): number }`
+  - `SystemClock` - Production-Implementation
+  - `MockClock` - Test-Implementation mit `setTime()` und `advance()`
+  - `defaultClock` - Export der Default-Instance
+- ✅ `lib/time/index.ts` erstellt für Re-exports
+- ✅ `hooks/useCombat.ts` refaktoriert:
+  - Neuer optionaler `clock` Parameter in UseCombatProps
+  - `Date.now()` durch `clock.now()` ersetzt
+
+---
+
+### [R06] ✅ useCombat State Machine Reducer Pattern - ERLEDIGT
+**Problem:** useCombat.ts (261 Zeilen) kombiniert State Machine Logik mit vielen useRef. State-Tracking über 6 separate Refs erschwert Debugging.
+
+**Abgeschlossen:** 2025-11-23
+
+**Änderungen:**
+- ✅ `lib/combat/combatReducer.ts` erstellt mit:
+  - `CombatPhase` Type: 'idle' | 'loading' | 'active' | 'feedback' | 'victory' | 'defeat'
+  - `CombatState` Interface für konsolidierten State
+  - `CombatAction` Union Type für alle Aktionen
+  - `combatReducer()` Function mit klaren State-Transitions
+  - Helper: `isInCombat()`, `isWaitingForAnswer()`
+- ✅ `hooks/useCombat.ts` refaktoriert:
+  - useState/useRef durch useReducer ersetzt
+  - Konsolidierter State statt 6 separater Refs
+  - Klare State-Transitions über dispatch()
+  - Abwärtskompatibles Return-Interface beibehalten
+
+---
+
+### [R07] ✅ LevelDistribution.ts aufteilen - ERLEDIGT
+**Problem:** LevelDistribution.ts (268 Zeilen) enthält 5+ Helper-Funktionen mit verschiedenen Verantwortlichkeiten: Level-Berechnung, Subject-Weighting, Spawn-Konfiguration.
+
+**Abgeschlossen:** 2025-11-23
+
+**Änderungen:**
+- ✅ `lib/spawning/SubjectWeighting.ts` erstellt mit:
+  - `calculateSubjectWeights()` - Berechnet inverse ELO-basierte Gewichtung
+  - `selectWeightedSubject()` - Wählt Subject nach Gewichtung
+- ✅ `lib/spawning/SpawnCalculator.ts` erstellt mit:
+  - `EnemySpawnConfig` Interface
+  - `SpawnCalculationInput` Interface
+  - `calculateEnemySpawns()` - Haupt-Spawn-Logik
+  - `collectRoomFloorTiles()` - Helper für Floor-Tile-Sammlung
+  - `getRoomSpawnStrategy()` - Room-Type-basierte Strategie
+- ✅ `lib/spawning/LevelDistribution.ts` refaktoriert:
+  - Re-exports für Abwärtskompatibilität
+  - Nur noch Level-Generierung: `randomNormal`, `generateNormalRoomLevel`, `generateCombatRoomLevel`
+  - Von 268 auf 93 Zeilen reduziert
+
+---
+
+### [R08] ✅ API Parameter Validation Utility - ERLEDIGT
+**Problem:** Mehrere API-Routes wiederholen identische Parameter-Validation-Patterns für URL Query Params.
+
+**Abgeschlossen:** 2025-11-23
+
+**Änderungen:**
+- ✅ `lib/api/validation.ts` erstellt mit:
+  - `ValidationResult<T>` - Type für Success/Error-Handling
+  - `getSearchParams(request)` - Extrahiert searchParams aus Request
+  - `getRequiredStringParam(searchParams, paramName)` - Pflicht-String-Parameter
+  - `getRequiredIntParam(searchParams, paramName)` - Pflicht-Int-Parameter
+  - `getOptionalStringParam(searchParams, paramName)` - Optionaler String
+  - `getOptionalIntParam(searchParams, paramName)` - Optionaler Int
+  - `parseRouteIntParam(value, paramName)` - Für Route-Parameter wie [id]
+- ✅ `lib/api/index.ts` - Re-exportiert validation utilities
+- ✅ `app/api/questions-with-elo/route.ts` - Refaktoriert mit validation utilities
+- ✅ `app/api/session-elo/route.ts` - Refaktoriert mit validation utilities
+
+---
+
+### [R09] ✅ Database Connection Factory für Tests - ERLEDIGT
+**Problem:** Datenbank ist Singleton ohne Reset-Möglichkeit. Tests beeinflussen globalen State.
+
+**Abgeschlossen:** 2025-11-23
+
+**Änderungen:**
+- ✅ `lib/db/connection.ts` erweitert mit:
+  - `DatabaseOptions` Interface: `{ path?: string, seed?: boolean }`
+  - `createDatabase(options)` - Factory für Custom-Databases
+  - `createTestDatabase(seed?)` - Convenience für In-Memory Tests
+  - `resetDatabase()` - Schließt und leert Singleton
+- ✅ `lib/db/init.ts` erweitert mit:
+  - `InitOptions` Interface: `{ seed?: boolean }`
+  - `initializeDatabase()` akzeptiert nun Seed-Option
+- ✅ `lib/db/index.ts` - Exportiert neue Funktionen und Types
+
+---
+
+### [R10] ✅ ELO-Aggregation aus /api/stats extrahieren - ERLEDIGT
+**Problem:** `/api/stats/route.ts` (140 Zeilen) reimplementiert Answer-Grouping-Logik die in `lib/db/questions.ts` bereits existiert.
+
+**Abgeschlossen:** 2025-11-23
+
+**Änderungen:**
+- ✅ `lib/db/stats.ts` erstellt mit:
+  - `QuestionStats` Interface - Stats für einzelne Fragen
+  - `SubjectStats` Interface - Stats für Fächer
+  - `UserStats` Interface - Vollständige User-Statistiken
+  - `getUserStats(userId)` - Aggregiert alle User-Statistiken
+- ✅ `app/api/stats/route.ts` vereinfacht:
+  - Von 140 auf 21 Zeilen reduziert
+  - Nutzt nun `getUserStats()` aus DB-Layer
+- ✅ `lib/db/index.ts` - Exportiert neue Funktionen und Types
+
+---
+
+## Abhängigkeiten zwischen Refactorings
+
+```
+R03 (localStorage) ──────┐
+R05 (Clock)        ──────┼──> Unabhängig, verbessern Testbarkeit
+R09 (DB Factory)   ──────┘
+
+R01 (BrightnessCalc) ────> Unabhängig
+
+R04 (constants Split) ───> Unabhängig
+
+R02 (useGameState) ──────> Profitiert von R03, R05
+
+R06 (Combat Reducer) ────> Profitiert von R05
+
+R07 (LevelDistribution) ─> Unabhängig
+
+R08 (API Validation) ────> Unabhängig
+
+R10 (Stats Extract) ─────> Unabhängig
 ```
 
-**Aufwand:** M | **Risiko:** niedrig
+## Priorisierung
 
-**Schritte:**
-1. Erstelle `lib/api/client.ts` mit Basis-Fetch-Wrapper
-2. Erstelle `lib/api/elo.ts`, `lib/api/questions.ts`, `lib/api/answers.ts`
-3. Exportiere gebündelten Client aus `lib/api/index.ts`
-4. Ersetze fetch-Calls in hooks/useCombat.ts
-5. Ersetze fetch-Calls in hooks/useScoring.ts
-6. Ersetze fetch-Calls in lib/game/DungeonManager.ts
-7. Ersetze fetch-Calls in components/GameCanvas.tsx
+### Quick Wins (hoher Impact, niedriges Risiko) ✅ ABGESCHLOSSEN
+1. **R01** - ✅ BrightnessCalculator extrahieren - ERLEDIGT 2025-11-23
+2. **R03** - ✅ localStorage Abstraktion - ERLEDIGT 2025-11-23
+3. **R04** - ✅ constants.ts aufteilen - ERLEDIGT 2025-11-23
+4. **R08** - ✅ API Validation Utility - ERLEDIGT 2025-11-23
 
----
+### Nächster Sprint (mittlerer Impact) ✅ ABGESCHLOSSEN
+5. **R05** - ✅ Clock Injection - ERLEDIGT 2025-11-23
+6. **R07** - ✅ LevelDistribution Split - ERLEDIGT 2025-11-23
+7. **R09** - ✅ DB Factory - ERLEDIGT 2025-11-23
+8. **R10** - ✅ Stats Extraktion - ERLEDIGT 2025-11-23
 
-### ✅ [R02] Dupliziertes ELO-Loading konsolidieren (ERLEDIGT 2025-11-23 via R01)
-**Problem:** Drei unabhängige Implementierungen laden ELO-Daten vom selben Endpoint mit fast identischem Code.
+### Sprint 3 (höheres Risiko) ✅ ABGESCHLOSSEN
+9. **R02** - ✅ useGameState Split - ERLEDIGT 2025-11-23
+10. **R06** - ✅ Combat Reducer - ERLEDIGT 2025-11-23
 
-**Betroffene Dateien:**
-- `hooks/useCombat.ts:68-82` - `loadPlayerElo()`
-- `hooks/useScoring.ts:15-40` - `loadSessionElos()`
-- `lib/game/DungeonManager.ts:250-267` - inline in `spawnEnemies()`
+## Metriken (Vorher/Nachher Ziel)
 
-**Lösung:** Nach R01: Alle drei nutzen `api.elo.getSessionElo()`. Zusätzlich: ELO-State in einem gemeinsamen Hook oder Context.
-
-**Aufwand:** S | **Risiko:** niedrig
-
-**Abhängigkeit:** R01
-
-**Schritte:**
-1. Identifiziere gemeinsame Datenstruktur für ELO-Response
-2. Erstelle `lib/api/elo.ts` mit typisierter Funktion
-3. Ersetze alle drei Implementierungen durch API-Aufruf
-4. Optional: Erstelle `useEloData` Hook für Caching
+| Metrik | Vorher | Nach Quick Wins | Nach Sprint 2 | Nach Sprint 3 | Ziel |
+|--------|--------|-----------------|---------------|---------------|------|
+| Größte Komponente | 379 Zeilen | 379 Zeilen | 379 Zeilen | 379 Zeilen | <250 Zeilen |
+| Größter Hook | 317 Zeilen | 317 Zeilen | 317 Zeilen | ~280 Zeilen | <150 Zeilen |
+| Größtes Lib-Modul | 351 Zeilen | ~250 Zeilen | ~250 Zeilen | ~250 Zeilen | <200 Zeilen |
+| Dateien >300 Zeilen | 4 | 3 | 3 | 2 | 0 |
+| Unit-testbare Hooks | ~30% | ~40% | ~60% | ~75% | >80% |
 
 ---
 
-### ✅ [R03] God-File db.ts aufteilen (ERLEDIGT 2025-11-23)
-**Problem:** 682 Zeilen mit 5 verschiedenen Domänen: Users, Questions, Answers, XP, EditorLevels. Verletzt Single Responsibility. Erschert Testen einzelner Bereiche.
+**Erstellt:** 2025-11-23
+**Autor:** Claude Code Analyse
+**Status:** ✅ ABGESCHLOSSEN (10/10)
 
-**Betroffene Dateien:**
-- `lib/db.ts:1-682` - Gesamte Datei
+## Änderungshistorie
 
-**Lösung:** Aufteilen in domänenspezifische Module:
-```
-lib/db/
-├── connection.ts    # getDatabase(), DB_PATH
-├── migrations.ts    # Alle migrate*IfNeeded() Funktionen
-├── users.ts         # loginUser, getUserById, User interface
-├── questions.ts     # getAllQuestions, getQuestionsWithEloBySubject, etc.
-├── answers.ts       # logAnswer, AnswerLogEntry
-├── xp.ts            # addXp, XpLogEntry
-├── editorLevels.ts  # CRUD für EditorLevel
-└── index.ts         # Re-export für Backwards-Compatibility
-```
-
-**Aufwand:** L | **Risiko:** niedrig (nur Struktur, keine Logik-Änderung)
-
-**Schritte:**
-1. Erstelle `lib/db/connection.ts` mit `getDatabase()`
-2. Erstelle `lib/db/migrations.ts` mit allen Migrations-Funktionen
-3. Erstelle `lib/db/users.ts` (Zeilen 282-303)
-4. Erstelle `lib/db/questions.ts` (Zeilen 343-464)
-5. Erstelle `lib/db/answers.ts` (Zeilen 327-340)
-6. Erstelle `lib/db/xp.ts` (Zeilen 306-324)
-7. Erstelle `lib/db/editorLevels.ts` (Zeilen 549-681)
-8. Erstelle `lib/db/index.ts` mit Re-Exports
-9. Aktualisiere alle Imports in API-Routes
-10. Lösche alte `lib/db.ts`
-
----
-
-### ✅ [R04] Ref-Synchronisation durch Callback ersetzen (ERLEDIGT 2025-11-23)
-**Problem:** GameCanvas.tsx synchronisiert manuell Refs zwischen useCombat und useGameState über useEffect. Fehleranfällig und schwer nachvollziehbar.
-
-**Betroffene Dateien:**
-- `components/GameCanvas.tsx:118-122` - useEffect für Ref-Wiring
-
-**Lösung:** useGameState akzeptiert `startCombat`-Callback direkt als Prop statt über Ref.
-
-**Aufwand:** S | **Risiko:** mittel (Game-Loop betroffen)
-
-**Temporärer Test:**
-- Test: Kampf wird korrekt gestartet wenn Spieler Gegner berührt
-- Kann nach Refactoring gelöscht werden
-
-**Schritte:**
-1. Erweitere `UseGameStateProps` um `onStartCombat?: (enemy: Enemy) => void`
-2. Entferne `inCombatRef` und `startCombatRef` aus useGameState-Return
-3. Rufe `onStartCombat` in GameEngine bei Kollision auf
-4. Passe GameCanvas an: übergebe `combat.startCombat` als Prop
-5. Entferne useEffect-Wiring in GameCanvas
-
----
-
-### ✅ [R05] Direction-Konstanten zentralisieren (ERLEDIGT 2025-11-23)
-**Problem:** Direction-Arrays (`[{ dx: 0, dy: -1 }, ...]`) werden an mehreren Stellen hardcoded definiert.
-
-**Betroffene Dateien:**
-- `lib/game/GameEngine.ts:66, 106` - Direction-Array
-- `lib/rendering/GameRenderer.ts:68, 96, 143` - Direction-Array (3x!)
-
-**Lösung:** Zentrale Konstante in `lib/constants.ts`:
-```typescript
-export const DIRECTION_OFFSETS = [
-  { dx: 0, dy: -1, dir: 'up' },
-  { dx: 0, dy: 1, dir: 'down' },
-  { dx: -1, dy: 0, dir: 'left' },
-  { dx: 1, dy: 0, dir: 'right' }
-] as const;
-```
-
-**Aufwand:** S | **Risiko:** niedrig
-
-**Schritte:**
-1. Füge `DIRECTION_OFFSETS` zu `lib/constants.ts` hinzu
-2. Ersetze alle lokalen Definitionen durch Import
-
----
-
-### ✅ [R06] calculateElo Deprecation abschließen (ERLEDIGT 2025-11-23)
-**Problem:** Deprecated `calculateElo`-Funktion in db.ts (Zeile 397-402) existiert neben EloCalculator.ts. Zwei verschiedene ELO-Berechnungen im Code.
-
-**Betroffene Dateien:**
-- `lib/db.ts:393-402` - Deprecated calculateElo (Kommentar sagt "deprecated")
-
-**Lösung:** Funktion entfernen, alle Aufrufer auf EloCalculator umstellen.
-
-**Aufwand:** S | **Risiko:** niedrig
-
-**Abhängigkeit:** R03 (db.ts aufteilen)
-
-**Schritte:**
-1. Suche nach allen Verwendungen von `calculateElo` aus db.ts
-2. Ersetze durch EloCalculator-Funktionen
-3. Entferne die deprecated Funktion
-
----
-
-### ✅ [R07] loadUserXp in useAuth integrieren (ERLEDIGT 2025-11-23)
-**Problem:** `loadUserXp` in GameCanvas.tsx ruft `/api/auth/login` erneut auf, obwohl useAuth bereits Login handhabt. Duplizierte Login-Logik.
-
-**Betroffene Dateien:**
-- `components/GameCanvas.tsx:67-82` - `loadUserXp()` macht redundanten Login-Call
-
-**Lösung:** useAuth sollte XP als Teil des User-States zurückgeben.
-
-**Aufwand:** S | **Risiko:** niedrig
-
-**Schritte:**
-1. Erweitere useAuth um `userXp` State
-2. Lade XP beim Login mit
-3. Exponiere `userXp` und `setUserXp` aus useAuth
-4. Entferne `loadUserXp` aus GameCanvas
-5. Aktualisiere `handleXpGained` um `setUserXp` zu nutzen
-
----
-
-### ✅ [R08] DungeonManager.spawnEnemies Pure Function extrahieren (ERLEDIGT 2025-11-23)
-**Problem:** `spawnEnemies` (Zeilen 238-366) hat Side-Effects (fetch, this.enemies mutieren) und ist 130 Zeilen lang. Schwer testbar.
-
-**Betroffene Dateien:**
-- `lib/game/DungeonManager.ts:238-366` - `spawnEnemies()`
-
-**Lösung:** Extrahiere pure Funktion `calculateEnemySpawns()` die nur die Spawn-Positionen und Parameter berechnet. DungeonManager ruft diese auf und erstellt dann die Enemies.
-
-**Aufwand:** M | **Risiko:** mittel
-
-**Abhängigkeit:** R01 (API-Service Layer)
-
-**Schritte:**
-1. Erstelle `lib/spawning/EnemySpawnCalculator.ts`
-2. Extrahiere pure Funktion `calculateEnemySpawns(rooms, playerRoom, subjectWeights, subjectElos, spawnRng)`
-3. Return-Typ: `EnemySpawnConfig[]` mit Position, Subject, Level
-4. DungeonManager lädt ELO via API, ruft Calculator auf, erstellt Enemies
-
----
-
-### [R09] Combat-State-Machine extrahieren
-**Problem:** useCombat verwaltet komplexen State-Flow (idle → combat → question → feedback → next/end) mit vielen Refs und Timeouts. Schwer nachvollziehbar.
-
-**Betroffene Dateien:**
-- `hooks/useCombat.ts:1-278` - Gesamter Hook
-
-**Lösung:** Extrahiere State-Machine-Logik in separate Pure Function:
-```typescript
-type CombatState = 'idle' | 'loading' | 'question' | 'feedback' | 'victory' | 'defeat';
-type CombatAction = 'START' | 'QUESTION_LOADED' | 'ANSWER' | 'TIMEOUT' | 'NEXT' | 'END';
-
-function combatReducer(state: CombatState, action: CombatAction): CombatState
-```
-
-**Aufwand:** L | **Risiko:** mittel
-
-**Schritte:**
-1. Erstelle `lib/combat/CombatStateMachine.ts`
-2. Definiere States und Transitions
-3. Extrahiere State-Logik aus useCombat
-4. useCombat nutzt State-Machine für Transitions
-5. Side-Effects (fetch, timer) bleiben im Hook
-
----
-
-### ✅ [R10] Gemeinsame Farb-Konstanten extrahieren (ERLEDIGT 2025-11-23)
-**Problem:** UI-Farben wie `#4CAF50` (Grün), `#FF4444` (Rot), `#1a1a2e` (Dunkel) sind über Components verstreut.
-
-**Betroffene Dateien:**
-- `components/CharacterPanel.tsx` - Diverse Farbwerte
-- `components/CombatModal.tsx` - Diverse Farbwerte
-- `components/GameCanvas.tsx:213` - `#4CAF50` für Minimap-Border
-
-**Lösung:** Erstelle `lib/ui/colors.ts`:
-```typescript
-export const COLORS = {
-  success: '#4CAF50',
-  error: '#FF4444',
-  warning: '#FFA500',
-  background: { dark: '#1a1a2e', darker: '#0f0f1a' },
-  border: { gold: '#8B7355', light: '#a08060' }
-} as const;
-```
-
-**Aufwand:** S | **Risiko:** niedrig
-
-**Schritte:**
-1. Erstelle `lib/ui/colors.ts` mit Farbkonstanten
-2. Ersetze hardcoded Farben in Components schrittweise
-3. Beginne mit GameCanvas (kleinstes File)
-
----
-
-## Empfohlene Reihenfolge
-
-1. ✅ **R01** API-Service Layer (Grundlage für R02, R08)
-2. ✅ **R02** ELO-Loading konsolidieren (nutzt R01)
-3. ✅ **R05** Direction-Konstanten (Quick Win)
-4. ✅ **R06** calculateElo entfernen (Quick Win)
-5. ✅ **R07** loadUserXp integrieren (Quick Win)
-6. ✅ **R10** Farb-Konstanten (Quick Win)
-7. ✅ **R03** db.ts aufteilen (größeres Refactoring)
-8. ✅ **R04** Ref-Synchronisation (nach R03)
-9. ✅ **R08** spawnEnemies Pure Function (nach R01)
-10. **R09** Combat State-Machine (optional, größtes Refactoring)
-
-## Nicht in diesem Durchgang
-
-- Inline-Styles zu CSS-Modules migrieren (zu umfangreich)
-- Enemy.ts aufteilen (funktioniert, aber komplex)
-- GameRenderer aufteilen (funktioniert, niedrige Priorität)
-- React.memo/useMemo Optimierungen (Performance-Thema)
+| Datum | Phase | Änderungen |
+|-------|-------|------------|
+| 2025-11-23 | Quick Wins | R01, R03, R04, R08 abgeschlossen |
+| 2025-11-23 | Sprint 2 | R05, R07, R09, R10 abgeschlossen |
+| 2025-11-23 | Sprint 3 | R02, R06 abgeschlossen - Plan vollständig!
