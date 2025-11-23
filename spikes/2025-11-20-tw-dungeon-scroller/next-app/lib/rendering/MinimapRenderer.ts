@@ -5,6 +5,7 @@ import {
 } from '../constants';
 import type { TileType, Room } from '../constants';
 import type { Player } from '../enemy';
+import { getEntityTilePosition } from '../physics/TileCoordinates';
 
 export class MinimapRenderer {
   render(
@@ -86,8 +87,7 @@ export class MinimapRenderer {
       }
     }
 
-    const playerTileX = Math.floor((player.x + tileSize / 2) / tileSize);
-    const playerTileY = Math.floor((player.y + tileSize / 2) / tileSize);
+    const { tx: playerTileX, ty: playerTileY } = getEntityTilePosition(player, tileSize);
 
     ctx.fillStyle = '#00FFFF';
     ctx.fillRect(

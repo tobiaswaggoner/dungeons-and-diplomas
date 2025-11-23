@@ -18,6 +18,7 @@ import {
 import type { TileType, Room } from '../constants';
 import { DirectionCalculator } from '../movement/DirectionCalculator';
 import { AStarPathfinder } from '../pathfinding/AStarPathfinder';
+import { getTilePosition, getEntityTilePosition } from '../physics/TileCoordinates';
 import { Enemy } from './Enemy';
 import type { Player, EnemyUpdateContext } from './types';
 
@@ -43,8 +44,7 @@ export class EnemyAI {
     this.updateRoomId(enemy, tileSize, roomMap);
 
     // Calculate player's room ID
-    const playerTileX = Math.floor((player.x + tileSize / 2) / tileSize);
-    const playerTileY = Math.floor((player.y + tileSize / 2) / tileSize);
+    const { tx: playerTileX, ty: playerTileY } = getEntityTilePosition(player, tileSize);
     const playerRoomId = (playerTileX >= 0 && playerTileX < DUNGEON_WIDTH &&
                           playerTileY >= 0 && playerTileY < DUNGEON_HEIGHT)
       ? roomMap[playerTileY][playerTileX]
@@ -72,8 +72,7 @@ export class EnemyAI {
    * Update enemy's room ID based on current tile position
    */
   static updateRoomId(enemy: Enemy, tileSize: number, roomMap: number[][]): void {
-    const tileX = Math.floor((enemy.x + tileSize / 2) / tileSize);
-    const tileY = Math.floor((enemy.y + tileSize / 2) / tileSize);
+    const { tx: tileX, ty: tileY } = getEntityTilePosition(enemy, tileSize);
 
     if (tileX >= 0 && tileX < DUNGEON_WIDTH && tileY >= 0 && tileY < DUNGEON_HEIGHT) {
       const currentRoomId = roomMap[tileY][tileX];
@@ -206,10 +205,8 @@ export class EnemyAI {
       if (enemy.pathUpdateTimer <= 0 || enemy.path.length === 0) {
         enemy.pathUpdateTimer = Enemy.PATH_UPDATE_INTERVAL;
 
-        const enemyTileX = Math.floor((enemy.x + tileSize / 2) / tileSize);
-        const enemyTileY = Math.floor((enemy.y + tileSize / 2) / tileSize);
-        const playerTileX = Math.floor((player.x + tileSize / 2) / tileSize);
-        const playerTileY = Math.floor((player.y + tileSize / 2) / tileSize);
+        const { tx: enemyTileX, ty: enemyTileY } = getEntityTilePosition(enemy, tileSize);
+        const { tx: playerTileX, ty: playerTileY } = getEntityTilePosition(player, tileSize);
 
         enemy.path = AStarPathfinder.findPath(
           enemyTileX, enemyTileY,

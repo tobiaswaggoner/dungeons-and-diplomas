@@ -9,6 +9,7 @@ import type { DungeonManager } from '@/lib/game/DungeonManager';
 import type { GameEngine } from '@/lib/game/GameEngine';
 import type { GameRenderer } from '@/lib/rendering/GameRenderer';
 import type { MinimapRenderer } from '@/lib/rendering/MinimapRenderer';
+import { api } from '@/lib/api';
 
 interface UseGameStateProps {
   questionDatabase: QuestionDatabase | null;
@@ -100,15 +101,11 @@ export function useGameState({
     const xpAmount = 200;
 
     try {
-      await fetch('/api/xp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          xp_amount: xpAmount,
-          reason: 'treasure',
-          enemy_level: null
-        })
+      await api.xp.addXp({
+        user_id: userId,
+        xp_amount: xpAmount,
+        reason: 'treasure',
+        enemy_level: undefined
       });
 
       if (onXpGained) {

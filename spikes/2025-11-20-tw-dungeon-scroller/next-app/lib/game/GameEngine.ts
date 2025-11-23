@@ -10,6 +10,7 @@ import type { TileType, Room } from '../constants';
 import type { Player } from '../enemy';
 import { Enemy } from '../enemy';
 import { CollisionDetector } from '../physics/CollisionDetector';
+import { getEntityTilePosition } from '../physics/TileCoordinates';
 import { DirectionCalculator } from '../movement/DirectionCalculator';
 import type { UpdatePlayerContext, UpdateEnemiesContext } from '../types/game';
 
@@ -41,8 +42,7 @@ export class GameEngine {
     roomMap: number[][],
     rooms: Room[]
   ) {
-    const playerTileX = Math.floor((player.x + tileSize / 2) / tileSize);
-    const playerTileY = Math.floor((player.y + tileSize / 2) / tileSize);
+    const { tx: playerTileX, ty: playerTileY } = getEntityTilePosition(player, tileSize);
 
     if (playerTileX >= 0 && playerTileX < DUNGEON_WIDTH && playerTileY >= 0 && playerTileY < DUNGEON_HEIGHT) {
       const roomId = roomMap[playerTileY][playerTileX];
@@ -60,8 +60,7 @@ export class GameEngine {
     tileSize: number,
     dungeon: TileType[][]
   ): { x: number; y: number } | null {
-    const pTileX = Math.floor((player.x + tileSize / 2) / tileSize);
-    const pTileY = Math.floor((player.y + tileSize / 2) / tileSize);
+    const { tx: pTileX, ty: pTileY } = getEntityTilePosition(player, tileSize);
 
     // Check all 4 adjacent tiles
     for (const { dx, dy } of DIRECTION_OFFSETS) {
@@ -82,8 +81,7 @@ export class GameEngine {
    * Check if an entity is on a specific tile
    */
   private isEntityOnTile(entityX: number, entityY: number, tileX: number, tileY: number, tileSize: number): boolean {
-    const entityTileX = Math.floor((entityX + tileSize / 2) / tileSize);
-    const entityTileY = Math.floor((entityY + tileSize / 2) / tileSize);
+    const { tx: entityTileX, ty: entityTileY } = getEntityTilePosition({ x: entityX, y: entityY }, tileSize);
     return entityTileX === tileX && entityTileY === tileY;
   }
 
@@ -217,8 +215,7 @@ export class GameEngine {
       this.updateFogOfWar(player, tileSize, roomMap, rooms);
 
       // Check for treasure collection
-      const pTileX = Math.floor((player.x + tileSize / 2) / tileSize);
-      const pTileY = Math.floor((player.y + tileSize / 2) / tileSize);
+      const { tx: pTileX, ty: pTileY } = getEntityTilePosition(player, tileSize);
 
       if (pTileX >= 0 && pTileX < DUNGEON_WIDTH && pTileY >= 0 && pTileY < DUNGEON_HEIGHT) {
         if (treasures && onTreasureCollected) {
