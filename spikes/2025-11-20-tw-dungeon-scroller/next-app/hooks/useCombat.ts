@@ -1,11 +1,11 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import type { Enemy } from '@/lib/enemy';
 import type { Player } from '@/lib/enemy';
 import type { QuestionDatabase } from '@/lib/questions';
 import { COMBAT_TIME_LIMIT, COMBAT_FEEDBACK_DELAY, PLAYER_MAX_HP } from '@/lib/constants';
 import { selectQuestionFromPool, type SelectedQuestion } from '@/lib/combat/QuestionSelector';
 import { calculateEnemyXpReward } from '@/lib/scoring/LevelCalculator';
-import { calculatePlayerDamage, calculateEnemyDamage } from '@/lib/combat/DamageCalculator';
+import { CombatEngine } from '@/lib/combat/CombatEngine';
 import { api } from '@/lib/api';
 import { useTimer } from './useTimer';
 
@@ -112,12 +112,8 @@ export function useCombat({
         return;
       }
 
-      // Calculate dynamic time limit based on enemy level vs question difficulty
-      // Question level = 11 - ELO (lower ELO = harder question = higher level)
-      const questionLevel = question.elo !== null ? 11 - question.elo : 6; // Default to middle if no ELO
-      const enemyLevel = enemy.level;
-      const levelDifference = enemyLevel - questionLevel;
-      const dynamicTimeLimit = Math.max(3, Math.min(25, 13 - levelDifference)); // Clamp between 3 and 25 seconds
+      // Calculate dynamic time limit using CombatEngine
+      const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo);
 
       setCombatQuestion(question);
       setCombatFeedback('');
@@ -141,7 +137,11 @@ export function useCombat({
 
     const answerTimeMs = Date.now() - questionStartTimeRef.current;
     const isTimeout = selectedIndex === -1;
-    const isCorrect = selectedIndex === combatQuestion.correctIndex;
+
+    // Process answer using CombatEngine
+    const playerElo = currentPlayerEloRef.current;
+    const enemyLevel = currentEnemyRef.current.level;
+    const result = CombatEngine.processAnswer(selectedIndex, combatQuestion, playerElo, enemyLevel);
 
     // Track answer in database
     if (userId && combatQuestion.id) {
@@ -150,9 +150,9 @@ export function useCombat({
           user_id: userId,
           question_id: combatQuestion.id,
           selected_answer_index: isTimeout ? -1 : selectedIndex,
-          is_correct: isCorrect,
+          is_correct: result.isCorrect,
           answer_time_ms: answerTimeMs,
-          timeout_occurred: isTimeout
+          timeout_occurred: result.isTimeout
         });
 
         onUpdateSessionScores(currentSubjectRef.current);
@@ -164,30 +164,23 @@ export function useCombat({
       }
     }
 
-    // Calculate dynamic damage based on player ELO vs enemy level
-    const playerElo = currentPlayerEloRef.current;
-    const enemyLevel = currentEnemyRef.current.level;
+    // Apply damage based on result
+    setCombatFeedback(result.feedbackMessage);
 
-    if (isCorrect) {
-      const playerDamage = calculatePlayerDamage(playerElo, enemyLevel);
-      setCombatFeedback(`✓ Richtig! ${playerDamage} Schaden!`);
-      currentEnemyRef.current.takeDamage(playerDamage);
-    } else {
-      const enemyDamage = calculateEnemyDamage(playerElo, enemyLevel);
-      const correctAnswerText = combatQuestion.shuffledAnswers[combatQuestion.correctIndex];
-      setCombatFeedback(
-        isTimeout
-          ? `✗ Zeit abgelaufen! Richtige Antwort: ${correctAnswerText} (-${enemyDamage} HP)`
-          : `✗ Falsch! Richtige Antwort: ${correctAnswerText} (-${enemyDamage} HP)`
-      );
-      playerRef.current.hp -= enemyDamage;
+    if (result.targetedPlayer) {
+      // Enemy damages player
+      playerRef.current.hp -= result.damage;
       if (playerRef.current.hp < 0) playerRef.current.hp = 0;
       onPlayerHpUpdate(playerRef.current.hp);
+    } else {
+      // Player damages enemy
+      currentEnemyRef.current.takeDamage(result.damage);
     }
 
     setEnemyHp(currentEnemyRef.current.hp);
 
-    if (!currentEnemyRef.current.alive || playerRef.current.hp <= 0) {
+    // Check combat outcome using CombatEngine
+    if (CombatEngine.shouldEndCombat(currentEnemyRef.current.alive, playerRef.current.hp)) {
       setTimeout(() => endCombat(), COMBAT_FEEDBACK_DELAY);
     } else {
       setTimeout(() => askQuestion(), COMBAT_FEEDBACK_DELAY);

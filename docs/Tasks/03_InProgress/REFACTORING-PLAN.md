@@ -95,45 +95,23 @@ next-app/
 
 ---
 
-### [R04] Combat-Engine aus useCombat extrahieren
+### [R04] ✅ Combat-Engine aus useCombat extrahieren - ERLEDIGT
 
-**Problem:** `useCombat.ts` (268 Zeilen) vermischt State-Management, Business-Logik und API-Calls. Die Funktion `answerQuestion` (Zeilen 137-195) ist zu komplex.
+**Problem:** `useCombat.ts` vermischte State-Management, Business-Logik und API-Calls.
 
-**Betroffene Dateien:**
-- `hooks/useCombat.ts:137-195` - `answerQuestion()` mit ~60 Zeilen
-- `hooks/useCombat.ts:197-237` - `endCombat()` mit Award-Logik
+**Abgeschlossen:** 2025-11-23
 
-**Lösung:** Reine Combat-Engine-Klasse für Logik, Hook nur für State.
-
-```typescript
-// lib/combat/CombatEngine.ts
-export class CombatEngine {
-  static processAnswer(
-    selectedIndex: number,
-    question: SelectedQuestion,
-    enemy: Enemy,
-    player: Player,
-    playerElo: number
-  ): CombatResult { ... }
-
-  static calculateReward(enemy: Enemy, playerElo: number): number { ... }
-}
-```
-
-**Aufwand:** M | **Risiko:** mittel
-
-**Schritte:**
-1. `lib/combat/CombatEngine.ts` erstellen
-2. `processAnswer`-Logik extrahieren (Zeilen 143-186)
-3. `calculateReward`-Logik extrahieren
-4. useCombat refaktorieren, um CombatEngine zu nutzen
-5. Unit-Tests für CombatEngine schreiben
-
-**Temporäre Tests:**
-- Test: Korrekter Schaden bei richtiger Antwort
-- Test: Korrekter Schaden bei falscher Antwort
-- Test: Timeout-Behandlung
-- Test: XP-Berechnung bei Sieg
+**Änderungen:**
+- ✅ `lib/combat/CombatEngine.ts` erstellt mit:
+  - `processAnswer()` - Pure function für Antwortverarbeitung und Schadensberechnung
+  - `calculateDynamicTimeLimit()` - Zeitlimit basierend auf Schwierigkeit
+  - `shouldEndCombat()` - Kampfende-Prüfung
+  - `getCombatOutcome()` - Ergebnis-Ermittlung (victory/defeat/ongoing)
+- ✅ `AnswerResult` Interface für typsichere Rückgaben
+- ✅ `hooks/useCombat.ts` nutzt nun CombatEngine:
+  - `answerQuestion()` vereinfacht durch `CombatEngine.processAnswer()`
+  - `askQuestion()` nutzt `CombatEngine.calculateDynamicTimeLimit()`
+  - Kampfende-Prüfung durch `CombatEngine.shouldEndCombat()`
 
 ---
 
@@ -338,7 +316,7 @@ R10 (tiletheme/db)  ────────────────────
 ### Phase 2: Kernmodule (3-4 Tage)
 4. **R02** - ✅ Visibility-Logik - ERLEDIGT 2025-11-23
 5. **R03** - ✅ ThemeLoader - ERLEDIGT 2025-11-23
-6. **R04** - CombatEngine (3h)
+6. **R04** - ✅ CombatEngine - ERLEDIGT 2025-11-23
 
 ### Phase 3: Größere Refactorings (5-7 Tage)
 7. **R07** - EnemyAI-Module (4h)
@@ -368,4 +346,4 @@ R10 (tiletheme/db)  ────────────────────
 | Datum | Phase | Änderungen |
 |-------|-------|------------|
 | 2025-11-23 | Phase 1 | R01, R05, R06 abgeschlossen |
-| 2025-11-23 | Phase 2 | R02, R03 abgeschlossen |
+| 2025-11-23 | Phase 2 | R02, R03, R04 abgeschlossen - Phase 2 komplett! |
