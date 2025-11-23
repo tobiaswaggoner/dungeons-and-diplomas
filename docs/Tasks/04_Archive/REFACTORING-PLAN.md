@@ -1,459 +1,324 @@
 # Refactoring-Plan 2025-11-23
 
+## Fortschritt
+
+**Sprint 1 (Quick Wins) - ABGESCHLOSSEN ✅**
+- [R01] API-Abstraktionsschicht konsequent nutzen ✅
+- [R05] Duplizierte ELO-Lade-Logik extrahieren ✅
+- [R06] Inkonsistente API-Validierung vereinheitlichen ✅
+- [R07] Enemy-AI Pathfinder injizierbar machen ✅
+- [R10] Zentrales Error-Handling für Hooks ✅
+
+**Sprint 2 (Komponenten-Aufspaltung) - ABGESCHLOSSEN ✅**
+- [R04] SkillDashboard Component modularisieren ✅
+- [R02] useCombat Hook aufteilen ✅ (via Combat Reducer Pattern in R06)
+- [R03] DungeonView Component aufteilen ✅
+
+**Sprint 3 (Komplexe Refactorings) - ABGESCHLOSSEN ✅**
+- [R08] useTilemapEditorState Hook aufteilen ✅
+- [R09] TileRenderer aus GameRenderer extrahieren ✅
+
 ## Zusammenfassung
 
-Die Codebasis ist grundsätzlich gut strukturiert mit klarer Schichtentrennung (UI → Hooks → Engine → Utilities → Database). Die Hauptprobleme sind zwei **God Files** (`Enemy.ts` mit 498 Zeilen, `CombatModal.tsx` mit 484 Zeilen), **Testbarkeits-Probleme** durch direkte Abhängigkeits-Instanziierung und Browser-API-Kopplung, sowie **Code-Duplikation** bei API-Error-Handling (58+ Stellen) und CRUD-Routes.
+Die Codebasis ist insgesamt gut strukturiert mit klarer Trennung von Concerns. Es gibt jedoch einige "God-Files" (>300 Zeilen), inkonsistente Verwendung der API-Abstraktionsschicht und Testbarkeits-Probleme durch direkte Abhängigkeiten. Die bestehenden Abstraktionen (Storage, Clock, Database) sind gut, werden aber nicht konsequent genutzt.
 
 ## Architektur-Snapshot
 
 ```
 next-app/
-├── app/                     # Next.js App Router + API Routes (19 Endpoints)
-├── components/ (25)         # React Components (~5.100 Zeilen)
-├── hooks/ (6)               # Custom Hooks (~1.200 Zeilen)
-├── lib/ (40+)               # Core Game Logic (~6.400 Zeilen)
-│   ├── api/                 # Client-side API Layer
-│   ├── db/                  # Database Layer (modular)
-│   ├── game/                # Core Engine (GameEngine, DungeonManager)
-│   ├── dungeon/             # Dungeon Generation (BSP)
-│   ├── rendering/           # Canvas Rendering
-│   ├── combat/              # Combat Utilities
-│   ├── physics/             # Collision Detection
-│   ├── pathfinding/         # A* Pathfinding
-│   ├── scoring/             # ELO Calculation
-│   └── tiletheme/           # Tile Theme System
-└── public/Assets/           # Sprites, Tilesets
+├── app/api/         # 22 API Routes - gut strukturiert, kleine Dateien
+├── components/      # 32 Komponenten - einige kritisch große Dateien
+│   ├── combat/      # 8 Combat-UI-Komponenten
+│   ├── editor/      # 5 Editor-Komponenten
+│   ├── tilemapeditor/ # 7 Tilemap-Editor-Komponenten
+│   └── character/   # 5 Character-UI-Komponenten
+├── hooks/           # 9 Hooks - 3 sind zu groß (>250 Zeilen)
+└── lib/             # 118 Dateien - gut modularisiert
+    ├── api/         # API-Client mit Error-Handling
+    ├── combat/      # Combat-System mit Reducer
+    ├── db/          # Datenbank-Operationen
+    ├── game/        # Game-Engine
+    ├── enemy/       # Enemy-AI-System
+    ├── rendering/   # Canvas-Rendering
+    └── tiletheme/   # Tileset-System
 ```
 
-**Gesamtumfang:** ~110 Dateien, ~15.400 Zeilen Code
-
----
+**Metriken:**
+- 167 TypeScript/TSX Dateien
+- 15.853 LOC total
+- 3 Dateien >300 Zeilen (kritisch)
+- 9 Dateien >250 Zeilen (überwachungspflichtig)
+- Durchschnittliche Dateigröße: 95 Zeilen (gesund)
 
 ## Identifizierte Refactorings
 
-### [R01] Enemy.ts in Module aufteilen (God File)
+### [R01] API-Abstraktionsschicht konsequent nutzen
 
-**Problem:** `lib/Enemy.ts` (498 Zeilen) vereint AI-State-Machine, Pathfinding, Collision, Rendering und Animation in einer Klasse. Verstößt gegen Single Responsibility Principle und ist kaum testbar.
-
-**Betroffene Dateien:**
-- `lib/Enemy.ts:1-498` - Gesamte Datei muss aufgeteilt werden
-- `lib/game/GameEngine.ts:245` - Enemy-Referenzen
-- `lib/game/DungeonManager.ts:283-290` - Enemy-Instanziierung
-- `hooks/useCombat.ts:170` - Enemy.takeDamage() Aufruf
-
-**Lösung:** Aufteilen in Module:
-```
-lib/enemy/
-├── Enemy.ts (~100 Zeilen)        # Daten & Properties
-├── EnemyAI.ts (~200 Zeilen)      # AI State Machine
-├── EnemyRenderer.ts (~120 Zeilen) # Rendering & HP-Bar
-└── index.ts                       # Re-exports
-```
-
-**Aufwand:** L | **Risiko:** mittel
-
-**Schritte:**
-1. `lib/enemy/` Verzeichnis erstellen
-2. `EnemyRenderer.ts` extrahieren: `draw()` Methode + HP-Bar + Status-Anzeige
-3. `EnemyAI.ts` extrahieren: `update()` Logik, State-Machine (IDLE/WANDERING/FOLLOWING)
-4. `Enemy.ts` als Datenklasse belassen: Properties, `takeDamage()`, `load()`
-5. Dependencies über Constructor Injection: `constructor(ai: EnemyAI, renderer: EnemyRenderer)`
-6. Imports in allen konsumierenden Dateien aktualisieren
-7. Unit Tests für AI State-Machine schreiben
-
-**Temporäre Tests:**
-- Test: AI-State-Übergänge (IDLE → WANDERING → FOLLOWING)
-- Test: Aggro-Radius basierend auf Player-ELO
-- Test: Pathfinding-Integration
-- Diese Tests bleiben permanent (keine Löschung)
-
----
-
-### [R02] CombatModal.tsx aufteilen (God Component)
-
-**Problem:** `components/CombatModal.tsx` (484 Zeilen) mischt UI, Timer-Logik, Animationen und State-Management.
+**Problem:** Einige Komponenten und Hooks umgehen die existierende API-Abstraktionsschicht (`lib/api/`) und rufen `fetch()` direkt auf. Dies macht Tests schwierig und führt zu inkonsistenter Fehlerbehandlung.
 
 **Betroffene Dateien:**
-- `components/CombatModal.tsx:1-484` - Gesamte Komponente
-- `components/GameCanvas.tsx:~150` - CombatModal-Verwendung
+- `components/LoginModal.tsx:26-32` - Direkter fetch() Aufruf statt api.auth.login()
+- `hooks/useAuth.ts:46` - Direkter fetch('/api/auth/logout') statt api.auth.logout()
+- `components/SkillDashboard.tsx:71` - Direkter fetch(/api/stats) statt API-Client
 
-**Lösung:** In kleinere Komponenten aufteilen:
-```
-components/combat/
-├── CombatModal.tsx (~150 Zeilen)    # Container, Layout
-├── CombatQuestion.tsx (~100 Zeilen) # Frage-Anzeige
-├── CombatAnswers.tsx (~100 Zeilen)  # Antwort-Buttons
-├── CombatTimer.tsx (~60 Zeilen)     # Timer mit Animation
-└── CombatFeedback.tsx (~80 Zeilen)  # Feedback nach Antwort
-```
-
-**Aufwand:** M | **Risiko:** niedrig
-
-**Schritte:**
-1. `CombatTimer.tsx` extrahieren (einfachste Komponente)
-2. `CombatQuestion.tsx` extrahieren (Frage + Difficulty-Indicator)
-3. `CombatAnswers.tsx` extrahieren (Buttons + Shuffle-State)
-4. `CombatFeedback.tsx` extrahieren (Richtig/Falsch Animation)
-5. `CombatModal.tsx` als Container belassen mit Props-Drilling
-6. Shared State über Context oder Props
-
----
-
-### [R03] API Error Handler extrahieren
-
-**Problem:** Identisches Try-Catch-Pattern in 58+ API-Route-Stellen:
-```typescript
-try { ... } catch (error) {
-  console.error('Error [action]:', error);
-  return NextResponse.json({ error: 'Failed to [action]' }, { status: 500 });
-}
-```
-
-**Betroffene Dateien:**
-- `app/api/answers/route.ts:50-52`
-- `app/api/xp/route.ts:33-38`
-- `app/api/session-elo/route.ts:18-20`
-- `app/api/questions-with-elo/route.ts:18-22`
-- `app/api/stats/route.ts:128-131`
-- Und 13+ weitere API Routes
-
-**Lösung:** Shared Error Handler erstellen:
-```typescript
-// lib/api/errorHandler.ts
-export function handleApiError(error: unknown, action: string): NextResponse {
-  console.error(`Error ${action}:`, error);
-  return NextResponse.json({ error: `Failed to ${action}` }, { status: 500 });
-}
-
-// Oder Higher-Order-Function:
-export function withErrorHandler<T>(
-  handler: () => Promise<T>,
-  action: string
-): Promise<NextResponse> { ... }
-```
+**Lösung:** Alle direkten fetch()-Aufrufe durch die existierende API-Abstraktionsschicht ersetzen.
 
 **Aufwand:** S | **Risiko:** niedrig
 
 **Schritte:**
-1. `lib/api/errorHandler.ts` erstellen
-2. In einer Route testen (z.B. `/api/subjects`)
-3. Alle 18+ API Routes refactoren
-4. Lint-Rule für konsistente Verwendung
+1. In LoginModal.tsx: `fetch('/api/auth/login')` durch `api.auth.login()` ersetzen
+2. In useAuth.ts: `fetch('/api/auth/logout')` durch `api.auth.logout()` ersetzen
+3. In SkillDashboard.tsx: `fetch(/api/stats)` durch API-Client ersetzen (falls nicht vorhanden, erstellen)
+4. Prüfen ob weitere direkte fetch()-Aufrufe existieren
 
 ---
 
-### [R04] useGameState Dependency Injection
+### [R02] useCombat Hook aufteilen
 
-**Problem:** Hook instanziiert Abhängigkeiten direkt, Browser-APIs werden direkt aufgerufen:
-```typescript
-const gameEngineRef = useRef<GameEngine>(new GameEngine());
-window.addEventListener('resize', handleResize);
-gameLoopIdRef.current = requestAnimationFrame(gameLoop);
-```
+**Problem:** Der useCombat Hook hat 282 Zeilen und mischt mehrere Verantwortlichkeiten: State-Management, API-Aufrufe, Timer-Logik und Schadens-Berechnung. Dies erschwert Tests und Wartung.
 
 **Betroffene Dateien:**
-- `hooks/useGameState.ts:72-74` - Direkte Instanziierung
-- `hooks/useGameState.ts:94-103` - Direkte fetch() Aufrufe
-- `hooks/useGameState.ts:215` - requestAnimationFrame
-- `hooks/useGameState.ts:272-274` - window.addEventListener
+- `hooks/useCombat.ts:1-282` - Gesamter Hook ist zu groß
 
-**Lösung:** Factory-Pattern und Abstraktion:
-```typescript
-interface GameStateConfig {
-  gameEngineFactory?: () => GameEngine;
-  rendererFactory?: () => GameRenderer;
-  scheduler?: { requestFrame: (cb: () => void) => number };
-  eventTarget?: Pick<Window, 'addEventListener' | 'removeEventListener'>;
-}
-
-export function useGameState(config: GameStateConfig = {}) { ... }
-```
+**Lösung:** Den Hook in fokussierte Sub-Hooks aufteilen, die jeweils eine klare Verantwortlichkeit haben.
 
 **Aufwand:** M | **Risiko:** mittel
 
 **Schritte:**
-1. `GameStateConfig` Interface definieren
-2. Default-Factories für Production erstellen
-3. Hook Parameter erweitern mit optionalem Config
-4. Browser-APIs durch injizierbare Abstraktionen ersetzen
-5. Unit Tests mit Mock-Factories schreiben
+1. Extrahiere `useCombatQuestion()` - Fragen-Logik (fetch, select, shuffle)
+2. Extrahiere `useCombatDamage()` - Schadens-Berechnung und HP-Updates
+3. Der Haupt-Hook orchestriert nur noch die Sub-Hooks
+4. Tests für jeden Sub-Hook schreiben
 
-**Temporäre Tests:**
-- Test: Game Loop startet/stoppt korrekt
-- Test: Keyboard-Events werden verarbeitet
-- Test: Player-Collision funktioniert
-- Tests bleiben permanent
+**Abhängigkeiten:** Keine
 
 ---
 
-### [R05] QuestionSelector von API-Call trennen
+### [R03] DungeonView Component aufteilen
 
-**Problem:** `QuestionSelector.ts` führt API-Call und Selection-Logik in einer Funktion aus:
-```typescript
-const response = await fetch(`/api/questions-with-elo?subject=${enemy.subject}&userId=${userId}`);
-```
+**Problem:** DungeonView.tsx hat 379 Zeilen und kombiniert Canvas-Rendering, Theme-Loading und Sprite-Animation in einer Komponente.
 
 **Betroffene Dateien:**
-- `lib/combat/QuestionSelector.ts:9` - fetch() Aufruf
-- `lib/combat/QuestionSelector.ts:17-47` - Selection-Logik mit `any` Types
-- `hooks/useCombat.ts:97` - selectQuestion() Aufruf
+- `components/combat/DungeonView.tsx:1-379` - God-Component
 
-**Lösung:** Pure Function + API-Call Separation:
-```typescript
-// Pure Selection (testbar)
-export function selectQuestionFromPool(
-  questions: QuestionWithElo[],
-  enemyLevel: number,
-  askedQuestions: Set<number>
-): QuestionWithElo | null { ... }
+**Lösung:** In fokussierte Sub-Komponenten aufteilen.
 
-// API Wrapper (in useCombat.ts)
-const questions = await api.questions.getQuestionsWithElo(enemy.subject, userId);
-const question = selectQuestionFromPool(questions, enemy.level, askedQuestionsRef.current);
-```
+**Aufwand:** M | **Risiko:** mittel
+
+**Schritte:**
+1. Extrahiere `<DungeonCanvas />` - Pure Rendering-Logik
+2. Extrahiere `useDungeonTheme()` Hook - Theme-Management
+3. Extrahiere `useDungeonSprites()` Hook - Sprite-Animation
+4. DungeonView wird zum Orchestrator
+
+**Abhängigkeiten:** Keine
+
+---
+
+### [R04] SkillDashboard Component modularisieren
+
+**Problem:** SkillDashboard.tsx hat 333 Zeilen mit inline definierten Sub-Komponenten und komplexer Filterung/Sortierung.
+
+**Betroffene Dateien:**
+- `components/SkillDashboard.tsx:1-333` - God-Component
+
+**Lösung:** Sub-Komponenten extrahieren und State-Management vereinfachen.
 
 **Aufwand:** S | **Risiko:** niedrig
 
 **Schritte:**
-1. `selectQuestionFromPool()` als pure function extrahieren
-2. Proper Typing mit `QuestionWithElo[]` statt `any`
-3. API-Call in `useCombat.ts` verschieben
-4. Optional: Seeded RNG Parameter für deterministische Tests
-5. Unit Tests für Selection-Algorithmus
+1. Extrahiere `<SubjectStatCard />` - Fächer-Statistik-Karte
+2. Extrahiere `<QuestionStatsList />` - Fragen-Liste mit Statistiken
+3. Extrahiere `useDashboardData()` Hook - Daten-Fetching und Transformation
+4. Dashboard-Layout bleibt als Container
+
+**Abhängigkeiten:** [R01] sollte vorher abgeschlossen sein
 
 ---
 
-### [R06] RNG-Duplikation konsolidieren
+### [R05] Duplizierte ELO-Lade-Logik extrahieren
 
-**Problem:** Zwei verschiedene RNG-Algorithmen (Mulberry32 vs LCG), identische `createRng()` Funktion dupliziert:
+**Problem:** Die gleiche ELO-Lade-Logik erscheint mehrfach in useCombat.ts und useScoring.ts.
 
 **Betroffene Dateien:**
-- `lib/dungeon/SeededRandom.ts:1-68` - Mulberry32 Implementation
-- `lib/spawning/LevelDistribution.ts:13-37` - LCG createRng() Funktion
-- `lib/tiletheme/RenderMapGenerator.ts:14-37` - Identische createRng() Kopie
+- `hooks/useCombat.ts:54-65` - loadPlayerElo Callback
+- `hooks/useCombat.ts:210-216` - ELO-Laden in startCombat
+- `hooks/useScoring.ts:16-38` - loadSessionElos
+- `hooks/useScoring.ts:40-63` - updateSessionScores
 
-**Lösung:** Einheitliche RNG-Klasse verwenden:
-```typescript
-// lib/random/SeededRandom.ts (existiert bereits)
-import { SeededRandom } from '../dungeon/SeededRandom';
-
-// In LevelDistribution.ts und RenderMapGenerator.ts:
-const rng = new SeededRandom(seed);
-const value = rng.next(); // statt createRng(seed)()
-```
+**Lösung:** Gemeinsame ELO-Service-Funktionen oder Hook extrahieren.
 
 **Aufwand:** S | **Risiko:** niedrig
 
 **Schritte:**
-1. `SeededRandom` als zentrale Klasse definieren
-2. `createRng()` in `LevelDistribution.ts` durch `SeededRandom` ersetzen
-3. `createRng()` in `RenderMapGenerator.ts` durch `SeededRandom` ersetzen
-4. Verify: Dungeon-Generation produziert identische Ergebnisse mit gleichem Seed
+1. Erstelle `lib/scoring/EloService.ts` mit Funktionen für ELO-Laden
+2. Oder erstelle `useEloData()` Hook für gemeinsame Logik
+3. Ersetze duplizierte Aufrufe durch Service/Hook
+4. Unit-Tests für ELO-Service schreiben
+
+**Abhängigkeiten:** Keine
 
 ---
 
-### [R07] Overlay Components konsolidieren
+### [R06] Inkonsistente Validierung in API-Routes vereinheitlichen
 
-**Problem:** `VictoryOverlay.tsx` und `DefeatOverlay.tsx` haben nahezu identische Struktur:
-- Identisches CSS-Positioning
-- Identische Animation-Patterns
-- Gleiche setTimeout-Logik
+**Problem:** Einige API-Routes nutzen die Validierungs-Utilities aus `lib/api/validation.ts`, andere machen manuelle Typ-Checks.
 
 **Betroffene Dateien:**
-- `components/VictoryOverlay.tsx:20-50` - Overlay-Struktur
-- `components/DefeatOverlay.tsx:20-50` - Nahezu identischer Code
+- `app/api/answers/route.ts:11-36` - Manuelle Validierung
+- `app/api/questions-with-elo/route.ts:4-13` - Nutzt Validation-Utilities (gut!)
 
-**Lösung:** Shared Base Component:
-```typescript
-// components/GameOverlay.tsx
-interface GameOverlayProps {
-  title: string;
-  subtitle?: string;
-  backgroundColor: string;
-  onContinue: () => void;
-  autoCloseDelay?: number;
-}
-
-export function GameOverlay({ ... }: GameOverlayProps) { ... }
-
-// Usage:
-<GameOverlay title="VICTORY!" backgroundColor="rgba(0,100,0,0.9)" ... />
-<GameOverlay title="DEFEAT!" backgroundColor="rgba(100,0,0,0.9)" ... />
-```
+**Lösung:** Alle API-Routes auf die zentrale Validierung umstellen.
 
 **Aufwand:** S | **Risiko:** niedrig
 
 **Schritte:**
-1. `GameOverlay.tsx` Base Component erstellen
-2. `VictoryOverlay.tsx` refactoren um GameOverlay zu nutzen
-3. `DefeatOverlay.tsx` refactoren um GameOverlay zu nutzen
-4. CSS Animations in shared styles extrahieren
+1. Identifiziere alle Routes mit manueller Validierung
+2. Erstelle Validierungs-Schemas für fehlende Routen
+3. Ersetze manuelle Checks durch `getRequiredIntParam`, `getRequiredStringParam`
+4. Teste alle API-Endpoints
+
+**Abhängigkeiten:** Keine
 
 ---
 
-### [R08] useCombat Timer-Logik extrahieren
+### [R07] Enemy-AI Pathfinder injizierbar machen
 
-**Problem:** Timer-Management mit setInterval ist direkt im Hook implementiert:
-```typescript
-combatTimerIntervalRef.current = setInterval(() => {
-  setCombatTimer(prev => {
-    if (prev <= 1) { clearInterval(...); answerQuestion(-1); return 0; }
-    return prev - 1;
-  });
-}, 1000);
-```
+**Problem:** EnemyAI.ts ruft `AStarPathfinder.findPath()` direkt auf (statische Methode). Dies macht Unit-Tests schwierig, da der Pathfinder nicht gemockt werden kann.
 
 **Betroffene Dateien:**
-- `hooks/useCombat.ts:114-123` - Timer-Implementierung
-- `hooks/useCombat.ts:41-46` - Multiple Refs für State
+- `lib/enemy/EnemyAI.ts:177-181` - Direkter Aufruf von AStarPathfinder
 
-**Lösung:** Custom `useTimer` Hook extrahieren:
-```typescript
-// hooks/useTimer.ts
-interface UseTimerOptions {
-  duration: number;
-  onExpire: () => void;
-  scheduler?: { setInterval: typeof setInterval; clearInterval: typeof clearInterval };
-}
-
-export function useTimer({ duration, onExpire, scheduler }: UseTimerOptions) {
-  // ... Timer-Logik
-  return { timeRemaining, start, stop, reset };
-}
-```
+**Lösung:** Pathfinder als Dependency Injection implementieren.
 
 **Aufwand:** S | **Risiko:** niedrig
 
 **Schritte:**
-1. `useTimer.ts` Hook erstellen
-2. Timer-Logik aus `useCombat.ts` extrahieren
-3. Scheduler als optionaler Parameter für Tests
-4. `useCombat.ts` refactoren um `useTimer` zu nutzen
-5. Unit Tests mit Fake Timers
+1. Definiere `Pathfinder` Interface in `lib/enemy/types.ts`
+2. Erstelle `DefaultPathfinder` Wrapper um AStarPathfinder
+3. EnemyAI akzeptiert Pathfinder als Constructor-Parameter
+4. Tests können MockPathfinder injizieren
+
+**Abhängigkeiten:** Keine
 
 ---
 
-### [R09] GameEngine Parameter Object Pattern
+### [R08] useTilemapEditorState Hook aufteilen
 
-**Problem:** `updatePlayer()` hat 13 Parameter, was Lesbarkeit und Testbarkeit erschwert:
-```typescript
-public updatePlayer(
-  dt: number, player: Player, keys: KeyboardState, tileSize: number,
-  dungeon: TileType[][], roomMap: number[][], rooms: Room[],
-  playerSprite: SpriteSheetLoader | null, inCombat: boolean,
-  doorStates: Map<string, boolean>, enemies: Enemy[],
-  treasures?: Set<string>, onTreasureCollected?: (x, y) => void
-)
-```
+**Problem:** Der Hook hat 317 Zeilen und verwaltet zu viele verschiedene State-Bereiche: Theme-State, Tileset-Selection, Drag-Drop-Logik.
 
 **Betroffene Dateien:**
-- `lib/game/GameEngine.ts:143-157` - updatePlayer() Signatur
-- `hooks/useGameState.ts:~200` - Aufruf mit vielen Parametern
+- `hooks/useTilemapEditorState.ts:1-317` - Überladen mit Verantwortlichkeiten
 
-**Lösung:** Parameter Object einführen:
-```typescript
-interface UpdatePlayerContext {
-  dt: number;
-  player: Player;
-  keys: KeyboardState;
-  tileSize: number;
-  dungeon: TileType[][];
-  roomMap: number[][];
-  rooms: Room[];
-  playerSprite: SpriteSheetLoader | null;
-  inCombat: boolean;
-  doorStates: Map<string, boolean>;
-  enemies: Enemy[];
-  treasures?: Set<string>;
-  onTreasureCollected?: (x: number, y: number) => void;
-}
+**Lösung:** In fokussierte Hooks aufteilen.
 
-public updatePlayer(context: UpdatePlayerContext) { ... }
-```
+**Aufwand:** M | **Risiko:** mittel
+
+**Schritte:**
+1. Extrahiere `useTileThemeState()` - Theme-Management
+2. Extrahiere `useTilesetSelection()` - Tileset-Auswahl
+3. Extrahiere `useTileDragDrop()` - Drag-Drop-Logik
+4. Orchestrator-Hook kombiniert die Sub-Hooks
+
+**Abhängigkeiten:** Keine
+
+---
+
+### [R09] TileRenderer aus GameRenderer extrahieren
+
+**Problem:** GameRenderer.ts hat 250 Zeilen und mischt Tile-Rendering mit allgemeinem Rendering-Setup.
+
+**Betroffene Dateien:**
+- `lib/rendering/GameRenderer.ts:1-250` - Gemischte Verantwortlichkeiten
+
+**Lösung:** Tile-Rendering in eigene Klasse extrahieren.
+
+**Aufwand:** M | **Risiko:** mittel
+
+**Schritte:**
+1. Erstelle `lib/rendering/TileRenderer.ts`
+2. Extrahiere `renderTile()`, `renderFloor()`, `renderWall()` Methoden
+3. GameRenderer nutzt TileRenderer für Tile-Operationen
+4. TileRenderer ist separat testbar
+
+**Abhängigkeiten:** Keine
+
+---
+
+### [R10] Zentrales Error-Handling für Hooks
+
+**Problem:** Jeder Hook hat seine eigene try-catch-console.error Struktur. Keine konsistente Fehlerbehandlung oder Recovery-Mechanismen.
+
+**Betroffene Dateien:**
+- `hooks/useAuth.ts:32` - console.error('Failed to reload user XP')
+- `hooks/useCombat.ts:62,89,134,166,215` - 5x console.error()
+- `hooks/useScoring.ts:36,61` - 2x console.error()
+
+**Lösung:** Zentralen Error-Handler für Hooks erstellen.
 
 **Aufwand:** S | **Risiko:** niedrig
 
 **Schritte:**
-1. `UpdatePlayerContext` Interface in `constants.ts` definieren
-2. `updatePlayer()` Signatur ändern
-3. Aufrufstellen in `useGameState.ts` anpassen
-4. Optional: Ähnliche Pattern für andere große Funktionen
+1. Erstelle `lib/hooks/useErrorHandler.ts` mit zentraler Fehlerbehandlung
+2. Definiere Error-Typen (NetworkError, ValidationError, etc.)
+3. Optionales User-Feedback (Toast/Snackbar)
+4. Ersetze console.error Aufrufe durch Error-Handler
+
+**Abhängigkeiten:** Keine
 
 ---
 
-### [R10] Type Definitions konsolidieren
+## Priorisierung
 
-**Problem:** Identische Type-Interfaces an mehreren Stellen definiert:
-- `AnswerLogEntry` in `lib/api/answers.ts` und `lib/db/index.ts`
-- `SubjectEloScore` in `lib/api/elo.ts` und `lib/db/questions.ts`
-- `LoginResponse` in `lib/api/auth.ts` und API-Route
+### Sprint 1 (Quick Wins - niedriges Risiko)
+1. **[R01]** API-Abstraktionsschicht konsequent nutzen
+2. **[R05]** Duplizierte ELO-Lade-Logik extrahieren
+3. **[R06]** Inkonsistente Validierung in API-Routes vereinheitlichen
+4. **[R07]** Enemy-AI Pathfinder injizierbar machen
+5. **[R10]** Zentrales Error-Handling für Hooks
 
-**Betroffene Dateien:**
-- `lib/api/answers.ts:7-14` - AnswerLogEntry
-- `lib/api/elo.ts:7-11` - SubjectEloScore
-- `lib/api/auth.ts:11-15` - LoginResponse
-- `lib/db/questions.ts:47-51` - SubjectEloScore Duplikat
+### Sprint 2 (Komponenten-Aufspaltung - mittleres Risiko)
+6. **[R04]** SkillDashboard Component modularisieren
+7. **[R02]** useCombat Hook aufteilen
+8. **[R03]** DungeonView Component aufteilen
 
-**Lösung:** Zentrale Types-Datei:
-```typescript
-// lib/types/api.ts
-export interface AnswerLogEntry { ... }
-export interface SubjectEloScore { ... }
-export interface LoginResponse { ... }
+### Sprint 3 (Komplexe Refactorings)
+9. **[R08]** useTilemapEditorState Hook aufteilen
+10. **[R09]** TileRenderer aus GameRenderer extrahieren
 
-// In allen Dateien:
-import { AnswerLogEntry } from '../types/api';
-```
+## Temporäre Tests zur Absicherung
 
-**Aufwand:** S | **Risiko:** niedrig
+### Für [R02] useCombat Hook aufteilen
+- **Vor dem Refactoring:** Snapshot-Tests für Combat-Flow erstellen
+- **Zu testende Verhaltensweisen:**
+  - Combat-Start initialisiert korrekt
+  - Richtige Antwort dealt Schaden an Enemy
+  - Falsche Antwort dealt Schaden an Player
+  - Timer-Ablauf gilt als falsche Antwort
+  - Combat endet wenn HP <= 0
+- **Nach Refactoring:** Tests können auf permanente Unit-Tests umgestellt werden
 
-**Schritte:**
-1. `lib/types/api.ts` erstellen mit allen API-Types
-2. Duplikate durch Imports ersetzen
-3. Barrel Export in `lib/types/index.ts`
-4. TypeScript-Compiler verifiziert korrekte Verwendung
+### Für [R03] DungeonView Component aufteilen
+- **Vor dem Refactoring:** Visual Regression Tests (Screenshots)
+- **Zu testende Verhaltensweisen:**
+  - Theme wird korrekt geladen
+  - Sprites animieren korrekt
+  - Canvas-Größe ist responsiv
+- **Nach Refactoring:** Component-Tests für jede Sub-Komponente
 
----
+### Für [R09] TileRenderer extrahieren
+- **Vor dem Refactoring:** Canvas-Output-Tests (Pixel-Vergleiche)
+- **Zu testende Verhaltensweisen:**
+  - Tiles rendern an korrekten Positionen
+  - Tile-Varianten werden korrekt gewählt
+  - Fog-of-War maskiert unsichtbare Bereiche
+- **Nach Refactoring:** Unit-Tests für TileRenderer-Methoden
 
-## Abhängigkeiten zwischen Refactorings
+## Nicht in diesem Durchlauf
 
-```
-R03 (API Error Handler) → unabhängig
-R05 (QuestionSelector) → unabhängig
-R06 (RNG Konsolidierung) → unabhängig
-R07 (Overlay Components) → unabhängig
-R08 (Timer Hook) → vor R02
-R09 (Parameter Object) → vor R04
-R10 (Type Definitions) → vor R05
+Folgende Punkte wurden identifiziert, aber für spätere Iterationen zurückgestellt:
 
-R01 (Enemy Split) → nach R09 (für konsistente Patterns)
-R02 (CombatModal Split) → nach R08 (Timer bereits extrahiert)
-R04 (useGameState DI) → nach R09 (Parameter Object Pattern etabliert)
-```
-
-## Priorisierung nach Impact/Risiko
-
-| Erledigt | Priorität | ID | Impact | Risiko | Quick Win? |
-|----------|-----------|----|--------|--------|------------|
-| ✅ | 1 | R03 | Hoch | Niedrig | ✅ |
-| ✅ | 2 | R05 | Hoch | Niedrig | ✅ |
-| ✅ | 3 | R06 | Mittel | Niedrig | ✅ |
-| ✅ | 4 | R10 | Mittel | Niedrig | ✅ |
-| ✅ | 5 | R07 | Niedrig | Niedrig | ✅ |
-| ✅ | 6 | R08 | Mittel | Niedrig | ✅ |
-| ✅ | 7 | R09 | Mittel | Niedrig | |
-| ✅ | 8 | R02 | Hoch | Niedrig | |
-| ✅ | 9 | R04 | Hoch | Mittel | |
-| ✅ | 10 | R01 | Sehr Hoch | Mittel | |
-
-**Empfohlene Reihenfolge:** R03 → R05 → R06 → R10 → R08 → R09 → R07 → R02 → R04 → R01
-
----
-
-## Nicht behandelt in diesem Plan
-
-- **CRUD Route Factory Pattern** - Würde 8+ Route-Files vereinfachen, aber niedrigerer Impact
-- **ELO-Calculation Inkonsistenz** - Zwei verschiedene Algorithmen (Simple Percentage vs Progressive), benötigt Produkt-Entscheidung
-- **Server-Side Combat Validation** - Aktuell rein client-seitig, größeres Feature
-- **Error Boundaries für React** - Wichtig für Production, aber separates Thema
-- **Test-Suite Aufbau** - Sollte nach Refactoring-Phase erfolgen
+1. **Multiplayer-Vorbereitung** - Zu umfangreich, erfordert Architektur-Entscheidungen
+2. **Performance-Optimierung Canvas-Rendering** - Kein akutes Problem
+3. **Sprite-Pooling/Caching** - Nice-to-have, kein Blocker
+4. **Request-Deduplication/SWR** - Kann später hinzugefügt werden
