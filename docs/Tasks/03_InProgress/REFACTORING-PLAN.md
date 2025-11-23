@@ -295,10 +295,10 @@ interface LoginModalProps {
 
 ## Empfohlene Reihenfolge
 
-**Sprint 1 (Quick Wins):** <-- only implement these for now!
-1. [R04] Canvas Context Helper (S, niedrig) - Basis für andere Refactorings
-2. [R07] Color Constants (S, niedrig) - Schneller Cleanup
-3. [R10] LoginModal StorageService (S, niedrig) - Testbarkeit
+**Sprint 1 (Quick Wins):** ✅ ABGESCHLOSSEN
+1. ✅ [R04] Canvas Context Helper (S, niedrig) - Basis für andere Refactorings
+2. ✅ [R07] Color Constants (S, niedrig) - Schneller Cleanup
+3. ✅ [R10] LoginModal StorageService (S, niedrig) - Testbarkeit
 
 **Sprint 2 (Medium Impact):**
 4. [R08] Renderer Interfaces (S, niedrig) - Vorbereitung für Tests
@@ -352,4 +352,16 @@ describe('DungeonRNGPool', () => {
 ---
 
 **Erstellt:** 2025-11-23
-**Status:** In Analyse
+**Status:** Sprint 1 abgeschlossen (2025-11-23)
+
+## Changelog
+
+### Sprint 1 (2025-11-23)
+- ✅ [R04] Canvas Context Helper extrahieren
+  - `lib/rendering/canvasUtils.ts` erstellt mit `getContext2D()`, `clearCanvas()`, `getVisibleTileBounds()`
+  - 11 Dateien aktualisiert
+- ✅ [R07] Color Constants zentralisieren
+  - `RENDER_COLORS` zu `lib/ui/colors.ts` hinzugefügt
+  - Minimap und Editor Farben zentralisiert
+- ✅ [R10] LoginModal StorageService verwenden
+  - Optional `storage` Prop für Dependency Injection
