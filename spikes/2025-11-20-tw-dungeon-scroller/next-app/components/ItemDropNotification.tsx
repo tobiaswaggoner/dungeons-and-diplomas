@@ -2,31 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import { COLORS } from '@/lib/ui/colors';
-import type { ItemDefinition, ItemRarity } from '@/lib/items';
-import { RARITY_COLORS } from '@/lib/items';
+import type { ItemDefinition } from '@/lib/items';
+import { RARITY_COLORS, RARITY_CONFIG, SLOT_DISPLAY_NAMES } from '@/lib/items';
 
 interface ItemDropNotificationProps {
   item: ItemDefinition;
   onComplete?: () => void;
 }
 
-// German slot names
-const SLOT_NAMES: Record<string, string> = {
-  head: 'Helm',
-  chest: 'Brustplatte',
-  legs: 'Hose',
-  feet: 'Schuhe',
-  mainHand: 'Waffe',
-  offHand: 'Nebenhand',
-};
-
-// German rarity names
-const RARITY_NAMES: Record<ItemRarity, string> = {
-  common: 'Gewoehnlich',
-  uncommon: 'Ungewoehnlich',
-  rare: 'Selten',
-  epic: 'Episch',
-  legendary: 'Legendaer',
+// Effect display names
+const EFFECT_NAMES: Record<string, { name: string; color: string; suffix: string }> = {
+  max_hp: { name: 'Max HP', color: '#4ade80', suffix: '' },
+  damage_boost: { name: 'Schaden', color: '#f87171', suffix: '' },
+  damage_reduction: { name: 'Schutz', color: '#60a5fa', suffix: '' },
+  time_boost: { name: 'Zeit', color: '#fbbf24', suffix: 's' },
+  xp_boost: { name: 'XP Bonus', color: '#a78bfa', suffix: '%' },
+  hint_chance: { name: 'Hinweis', color: '#34d399', suffix: '%' },
 };
 
 export default function ItemDropNotification({ item, onComplete }: ItemDropNotificationProps) {
@@ -54,6 +45,7 @@ export default function ItemDropNotification({ item, onComplete }: ItemDropNotif
   }, [onComplete]);
 
   const rarityColor = RARITY_COLORS[item.rarity];
+  const rarityName = RARITY_CONFIG[item.rarity].name;
 
   return (
     <div
@@ -75,78 +67,104 @@ export default function ItemDropNotification({ item, onComplete }: ItemDropNotif
           borderRadius: '12px',
           padding: '16px 24px',
           display: 'flex',
-          flexDirection: 'column',
+          gap: '16px',
           alignItems: 'center',
-          gap: '8px',
-          boxShadow: `0 0 20px ${rarityColor}40, 0 0 40px ${rarityColor}20`,
+          boxShadow: `0 0 30px ${rarityColor}50, 0 0 60px ${rarityColor}30`,
         }}
       >
-        {/* Header */}
-        <div style={{
-          color: COLORS.gold,
-          fontSize: '14px',
-          fontWeight: 600,
-          letterSpacing: '2px',
-          textTransform: 'uppercase',
-        }}>
-          Item erhalten!
+        {/* Item Icon */}
+        <div
+          style={{
+            width: '64px',
+            height: '64px',
+            backgroundColor: COLORS.background.darker,
+            border: `2px solid ${rarityColor}`,
+            borderRadius: '8px',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            boxShadow: `0 0 10px ${rarityColor}40`,
+          }}
+        >
+          <img
+            src={item.iconPath}
+            alt={item.name}
+            style={{
+              width: '52px',
+              height: '52px',
+              objectFit: 'contain',
+              filter: 'drop-shadow(0 0 3px rgba(255,255,255,0.3))',
+            }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
         </div>
 
-        {/* Item name */}
-        <div style={{
-          color: rarityColor,
-          fontSize: '20px',
-          fontWeight: 700,
-          textShadow: `0 0 10px ${rarityColor}80`,
-        }}>
-          {item.name}
-        </div>
+        {/* Item Details */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {/* Header */}
+          <div style={{
+            color: COLORS.gold,
+            fontSize: '12px',
+            fontWeight: 600,
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+          }}>
+            Item erhalten!
+          </div>
 
-        {/* Item details */}
-        <div style={{
-          display: 'flex',
-          gap: '16px',
-          color: COLORS.text.muted,
-          fontSize: '12px',
-        }}>
-          <span style={{ color: rarityColor }}>
-            {RARITY_NAMES[item.rarity]}
-          </span>
-          <span>
-            {SLOT_NAMES[item.slot] || item.slot}
-          </span>
-        </div>
+          {/* Item name */}
+          <div style={{
+            color: rarityColor,
+            fontSize: '18px',
+            fontWeight: 700,
+            textShadow: `0 0 10px ${rarityColor}80`,
+          }}>
+            {item.name}
+          </div>
 
-        {/* Stats */}
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          marginTop: '4px',
-        }}>
-          {item.bonusHp && (
-            <span style={{ color: '#4ade80', fontSize: '13px' }}>
-              +{item.bonusHp} HP
+          {/* Item details */}
+          <div style={{
+            display: 'flex',
+            gap: '16px',
+            color: COLORS.text.muted,
+            fontSize: '12px',
+          }}>
+            <span style={{ color: rarityColor }}>
+              {rarityName}
             </span>
-          )}
-          {item.bonusDamage && (
-            <span style={{ color: '#f87171', fontSize: '13px' }}>
-              +{item.bonusDamage} Schaden
+            <span>
+              {SLOT_DISPLAY_NAMES[item.slot]}
             </span>
-          )}
-          {item.bonusTimeLimit && (
-            <span style={{ color: '#60a5fa', fontSize: '13px' }}>
-              +{item.bonusTimeLimit}s Zeit
-            </span>
-          )}
-        </div>
+          </div>
 
-        {/* Hint */}
-        <div style={{
-          color: COLORS.text.muted,
-          fontSize: '11px',
-          marginTop: '4px',
-        }}>
-          Druecke [I] fuer Inventar
+          {/* Stats */}
+          {item.effects && item.effects.length > 0 && (
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              marginTop: '4px',
+            }}>
+              {item.effects.map((effect, index) => {
+                const effectConfig = EFFECT_NAMES[effect.type] || { name: effect.type, color: '#fff', suffix: '' };
+                return (
+                  <span key={index} style={{ color: effectConfig.color, fontSize: '13px', fontWeight: 600 }}>
+                    +{effect.value}{effectConfig.suffix} {effectConfig.name}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Hint */}
+          <div style={{
+            color: COLORS.text.muted,
+            fontSize: '11px',
+            marginTop: '4px',
+          }}>
+            Druecke [I] fuer Inventar
+          </div>
         </div>
       </div>
     </div>

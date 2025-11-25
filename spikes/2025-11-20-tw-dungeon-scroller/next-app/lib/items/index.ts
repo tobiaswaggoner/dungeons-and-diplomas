@@ -3,5 +3,5 @@
  */
 
 export * from './types';
-export { generateItem, getAllSlots } from './itemDatabase';
-export { generateEnemyLoot } from './LootGenerator';
+export { getRandomCommonItem, getRandomRareItem, getRandomItemByRarity, getItemById, getAllSlots } from './itemDatabase';
+export { generateEnemyLoot, generateTreasureLoot } from './LootGenerator';
