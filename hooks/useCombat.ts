@@ -12,7 +12,7 @@ import { loadSubjectElo, findSubjectElo, DEFAULT_ELO } from '@/lib/scoring/EloSe
 import { useTimer } from './useTimer';
 import { type Clock, defaultClock } from '@/lib/time';
 import { logHookError } from '@/lib/hooks';
-import { generateEnemyLoot, type DroppedItem } from '@/lib/items';
+import { generateEnemyLoot, generateBossLoot, isBoss, type DroppedItem, type EquipmentBonuses, DEFAULT_BONUSES } from '@/lib/items';
 
 interface UseCombatProps {
   questionDatabase: QuestionDatabase | null;
@@ -23,6 +23,8 @@ interface UseCombatProps {
   onGameRestart: () => void;
   onXpGained?: (amount: number) => void;
   onItemDropped?: (item: DroppedItem) => void;
+  /** Equipment bonuses from currently equipped items */
+  equipmentBonuses?: EquipmentBonuses;
   tileSize?: number;
   clock?: Clock;
 }
@@ -36,6 +38,7 @@ export function useCombat({
   onGameRestart,
   onXpGained,
   onItemDropped,
+  equipmentBonuses = DEFAULT_BONUSES,
   tileSize = 64,
   clock = defaultClock
 }: UseCombatProps) {
@@ -84,10 +87,21 @@ export function useCombat({
           onXpGained(xpReward);
         }
 
-        // Generate loot drop
-        const droppedItem = generateEnemyLoot(enemy.level, enemy.x, enemy.y, tileSize);
+        // Generate loot drop - bosses (level 8+) always drop uncommon+ items
+        let droppedItem: DroppedItem | null;
+        if (isBoss(enemy.level)) {
+          // Boss always drops uncommon (green) or better
+          droppedItem = generateBossLoot(enemy.level, enemy.x, enemy.y, tileSize);
+          console.log(`[useCombat] Boss dropped: ${droppedItem.item.name} (${droppedItem.item.rarity})`);
+        } else {
+          // Regular enemy has chance-based drop
+          droppedItem = generateEnemyLoot(enemy.level, enemy.x, enemy.y, tileSize);
+          if (droppedItem) {
+            console.log(`[useCombat] Enemy dropped: ${droppedItem.item.name} (${droppedItem.item.rarity})`);
+          }
+        }
+
         if (droppedItem && onItemDropped) {
-          console.log(`[useCombat] Item dropped: ${droppedItem.item.name}`);
           onItemDropped(droppedItem);
         }
 
@@ -128,7 +142,8 @@ export function useCombat({
         return;
       }
 
-      const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo);
+      // Apply time bonus from equipment
+      const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo, equipmentBonuses.timeBonus);
 
       dispatch({
         type: 'ASK_QUESTION',
@@ -142,7 +157,7 @@ export function useCombat({
       logHookError('useCombat', error, 'Failed to fetch questions');
       dispatch({ type: 'END_COMBAT' });
     }
-  }, [state.enemy, state.askedQuestionIds, questionDatabase, userId, playerRef, clock, startTimer, endCombat]);
+  }, [state.enemy, state.askedQuestionIds, questionDatabase, userId, playerRef, clock, startTimer, endCombat, equipmentBonuses.timeBonus]);
 
   const answerQuestion = useCallback(async (selectedIndex: number) => {
     stopTimer();
@@ -154,7 +169,8 @@ export function useCombat({
     const answerTimeMs = clock.now() - state.questionStartTime;
     const isTimeout = selectedIndex === -1;
 
-    const result = CombatEngine.processAnswer(selectedIndex, question, state.playerElo, enemy.level);
+    // Apply equipment bonuses to combat calculations
+    const result = CombatEngine.processAnswer(selectedIndex, question, state.playerElo, enemy.level, equipmentBonuses);
 
     // Track answer in database
     if (userId && question.id) {
@@ -196,7 +212,7 @@ export function useCombat({
     } else {
       setTimeout(() => askQuestion(), COMBAT_FEEDBACK_DELAY);
     }
-  }, [state.question, state.enemy, state.questionStartTime, state.subject, state.playerElo, userId, clock, stopTimer, loadPlayerElo, onUpdateSessionScores, onPlayerHpUpdate, playerRef, endCombat, askQuestion]);
+  }, [state.question, state.enemy, state.questionStartTime, state.subject, state.playerElo, userId, clock, stopTimer, loadPlayerElo, onUpdateSessionScores, onPlayerHpUpdate, playerRef, endCombat, askQuestion, equipmentBonuses]);
 
   // Update timeout ref when answerQuestion changes
   useEffect(() => {
@@ -232,7 +248,8 @@ export function useCombat({
           return;
         }
 
-        const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo);
+        // Apply time bonus from equipment
+        const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo, equipmentBonuses.timeBonus);
 
         dispatch({
           type: 'ASK_QUESTION',
@@ -247,7 +264,7 @@ export function useCombat({
         dispatch({ type: 'END_COMBAT' });
       }
     }, 0);
-  }, [questionDatabase, userId, playerRef, clock, startTimer, answerQuestion]);
+  }, [questionDatabase, userId, playerRef, clock, startTimer, answerQuestion, equipmentBonuses.timeBonus]);
 
   const handleVictoryComplete = useCallback(() => {
     dispatch({ type: 'DISMISS_VICTORY' });

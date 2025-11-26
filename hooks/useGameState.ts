@@ -10,6 +10,7 @@ import type { GameRenderer } from '@/lib/rendering/GameRenderer';
 import type { MinimapRenderer } from '@/lib/rendering/MinimapRenderer';
 import { useKeyboardInput } from './useKeyboardInput';
 import { useTreasureCollection } from './useTreasureCollection';
+import { useFootsteps } from './useFootsteps';
 
 interface UseGameStateProps {
   questionDatabase: QuestionDatabase | null;
@@ -18,6 +19,8 @@ interface UseGameStateProps {
   onPlayerHpUpdate: (hp: number) => void;
   onXpGained?: (amount: number) => void;
   onTreasureCollected?: (screenX: number, screenY: number, xpAmount: number) => void;
+  /** Callback when an item is dropped (from treasures) */
+  onItemDropped?: (item: any) => void;
   /** Reference to combat state (injected from useCombat) */
   inCombatRef?: React.MutableRefObject<boolean>;
   /** Callback when combat should start (injected from useCombat) */
@@ -35,6 +38,7 @@ export function useGameState({
   onPlayerHpUpdate,
   onXpGained,
   onTreasureCollected,
+  onItemDropped,
   inCombatRef: externalInCombatRef,
   onStartCombat,
   playerRef: externalPlayerRef,
@@ -66,6 +70,9 @@ export function useGameState({
   const playerRef = externalPlayerRef || fallbackPlayerRef;
 
   // Use extracted keyboard input hook
+
+  // Use footsteps audio hook
+  const { updateFootsteps } = useFootsteps();
   const { keysRef } = useKeyboardInput({ eventTarget: config.eventTarget });
 
   // Use factories from config for dependency injection
@@ -93,7 +100,8 @@ export function useGameState({
     canvasRef,
     dungeonManagerRef,
     onXpGained,
-    onTreasureCollected
+    onTreasureCollected,
+    onItemDropped
   });
 
   const update = (dt: number) => {
@@ -131,6 +139,11 @@ export function useGameState({
       inCombat: inCombatRef.current,
       doorStates: manager.doorStates
     });
+    
+    // Update footstep sounds
+    if (!inCombatRef.current) {
+      updateFootsteps(playerRef.current, manager.enemies, manager.tileSize);
+    }
   };
 
   const render = () => {

@@ -2,24 +2,23 @@
  * Loot Generator - generates item drops from enemies
  */
 
-import type { ItemDefinition, ItemRarity, DroppedItem } from './types';
+import type { ItemRarity, DroppedItem } from './types';
 import { RARITY_WEIGHTS } from './types';
-import { getRandomItemByRarity, getAllSlots } from './itemDatabase';
-import type { EquipmentSlotKey } from './types';
+import { getRandomItemByRarity } from './itemDatabase';
 
 // Drop chance per enemy level (percentage, 0-100)
-// Higher level enemies have higher drop chance
+// Lower drop rates to make items feel more valuable
 const DROP_CHANCE_BY_LEVEL: Record<number, number> = {
-  1: 20,
-  2: 25,
-  3: 30,
-  4: 35,
-  5: 40,
-  6: 45,
-  7: 50,
-  8: 55,
-  9: 60,
-  10: 70,
+  1: 5,
+  2: 7,
+  3: 10,
+  4: 12,
+  5: 15,
+  6: 17,
+  7: 20,
+  8: 100, // Bosses (level 8+) handled separately with 100% drop
+  9: 100,
+  10: 100,
 };
 
 /**
@@ -38,14 +37,6 @@ function selectRarity(): ItemRarity {
   }
 
   return 'common';
-}
-
-/**
- * Select a random equipment slot
- */
-function selectSlot(): EquipmentSlotKey {
-  const slots = getAllSlots();
-  return slots[Math.floor(Math.random() * slots.length)];
 }
 
 /**
@@ -117,7 +108,7 @@ export function generateTreasureLoot(
 ): DroppedItem {
   // Treasure chests always drop common items
   const item = getRandomItemByRarity('common');
-  
+
   if (!item) {
     // Fallback to first common item if none found
     throw new Error('No common items available in database');
@@ -139,6 +130,86 @@ export function generateTreasureLoot(
   };
 
   console.log(`[LootGenerator] Treasure dropped ${item.name} at tile (${tileX}, ${tileY})`);
+
+  return droppedItem;
+}
+
+// Boss level threshold (enemies with level >= this are considered bosses)
+const BOSS_LEVEL_THRESHOLD = 8;
+
+/**
+ * Check if an enemy is a boss based on level
+ */
+export function isBoss(enemyLevel: number): boolean {
+  return enemyLevel >= BOSS_LEVEL_THRESHOLD;
+}
+
+/**
+ * Select rarity for boss drops (uncommon or better, weighted towards rare)
+ */
+function selectBossRarity(): ItemRarity {
+  // Boss drop weights: only uncommon, rare, epic, legendary
+  const bossWeights: Record<ItemRarity, number> = {
+    common: 0,      // Bosses never drop common
+    uncommon: 40,   // 40% chance for green
+    rare: 40,       // 40% chance for blue
+    epic: 15,       // 15% chance for purple
+    legendary: 5,   // 5% chance for orange
+  };
+
+  const rarities = Object.keys(bossWeights) as ItemRarity[];
+  const totalWeight = Object.values(bossWeights).reduce((a, b) => a + b, 0);
+  let random = Math.random() * totalWeight;
+
+  for (const rarity of rarities) {
+    random -= bossWeights[rarity];
+    if (random <= 0) {
+      return rarity;
+    }
+  }
+
+  return 'uncommon'; // Fallback to uncommon (guaranteed green minimum)
+}
+
+/**
+ * Generate loot for a defeated boss
+ * Bosses always drop items with uncommon (green) rarity or better
+ * @param bossLevel The level of the defeated boss
+ * @param bossX World position X (pixels)
+ * @param bossY World position Y (pixels)
+ * @param tileSize Size of a tile in pixels
+ * @returns DroppedItem - bosses always drop an item
+ */
+export function generateBossLoot(
+  bossLevel: number,
+  bossX: number,
+  bossY: number,
+  tileSize: number
+): DroppedItem {
+  // Bosses always drop uncommon (green) or better items
+  const rarity = selectBossRarity();
+  const item = getRandomItemByRarity(rarity);
+
+  if (!item) {
+    throw new Error(`No items available for rarity: ${rarity}`);
+  }
+
+  // Calculate tile position
+  const tileX = Math.floor(bossX / tileSize);
+  const tileY = Math.floor(bossY / tileSize);
+
+  const droppedItem: DroppedItem = {
+    id: `boss_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    item,
+    x: bossX,
+    y: bossY,
+    tileX,
+    tileY,
+    dropTime: Date.now(),
+    pickedUp: false,
+  };
+
+  console.log(`[LootGenerator] Boss (level ${bossLevel}) dropped ${rarity} ${item.name} at tile (${tileX}, ${tileY})`);
 
   return droppedItem;
 }
