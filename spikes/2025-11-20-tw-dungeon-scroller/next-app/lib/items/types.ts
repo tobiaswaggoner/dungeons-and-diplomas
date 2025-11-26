@@ -21,13 +21,20 @@ export interface ItemEffect {
 export interface ItemDefinition {
   id: string;
   name: string;
+  type?: string;  // e.g. "equipment"
   slot: EquipmentSlotKey;
   rarity: ItemRarity;
   icon?: string;
   iconPath: string;
+  spritePath?: string;
   description: string;
   value: number;
+  stackable?: boolean;
+  maxStack?: number;
   effects?: ItemEffect[];
+  droppable?: boolean;
+  tradeable?: boolean;
+  questItem?: boolean;
   // Legacy stats bonuses (for backwards compatibility)
   bonusHp?: number;
   bonusDamage?: number;

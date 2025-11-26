@@ -1,5 +1,6 @@
 import type { SelectedQuestion } from './QuestionSelector';
 import { calculatePlayerDamage, calculateEnemyDamage } from './DamageCalculator';
+import type { EquipmentBonuses } from '@/lib/items';
 
 /**
  * Result of processing a combat answer
@@ -14,6 +15,18 @@ export interface AnswerResult {
 }
 
 /**
+ * Default equipment bonuses (no equipment)
+ */
+const NO_BONUSES: EquipmentBonuses = {
+  maxHpBonus: 0,
+  damageBonus: 0,
+  damageReduction: 0,
+  timeBonus: 0,
+  xpBonus: 0,
+  hintChance: 0,
+};
+
+/**
  * Pure function combat engine.
  * Extracts business logic from useCombat hook for better testability and reusability.
  */
@@ -26,20 +39,23 @@ export class CombatEngine {
    * @param question The current question being answered
    * @param playerElo The player's current ELO for this subject
    * @param enemyLevel The enemy's level
+   * @param equipmentBonuses Optional equipment bonuses (damage, reduction, etc.)
    * @returns The result of the answer including damage and feedback
    */
   static processAnswer(
     selectedIndex: number,
     question: SelectedQuestion,
     playerElo: number,
-    enemyLevel: number
+    enemyLevel: number,
+    equipmentBonuses: EquipmentBonuses = NO_BONUSES
   ): AnswerResult {
     const isTimeout = selectedIndex === -1;
     const isCorrect = selectedIndex === question.correctIndex;
     const correctAnswerText = question.shuffledAnswers[question.correctIndex];
 
     if (isCorrect) {
-      const damage = calculatePlayerDamage(playerElo, enemyLevel);
+      // Apply damage bonus from equipment
+      const damage = calculatePlayerDamage(playerElo, enemyLevel, equipmentBonuses.damageBonus);
       return {
         isCorrect: true,
         isTimeout: false,
@@ -49,7 +65,8 @@ export class CombatEngine {
         correctAnswerText
       };
     } else {
-      const damage = calculateEnemyDamage(playerElo, enemyLevel);
+      // Apply damage reduction from equipment
+      const damage = calculateEnemyDamage(playerElo, enemyLevel, equipmentBonuses.damageReduction);
       const feedbackMessage = isTimeout
         ? `✗ Zeit abgelaufen! Richtige Antwort: ${correctAnswerText} (-${damage} HP)`
         : `✗ Falsch! Richtige Antwort: ${correctAnswerText} (-${damage} HP)`;
@@ -70,17 +87,20 @@ export class CombatEngine {
    *
    * @param enemyLevel The enemy's level (1-10)
    * @param questionElo The question's ELO (null if unanswered)
-   * @returns Time limit in seconds (clamped between 3 and 25)
+   * @param timeBonus Bonus time from equipment (default 0)
+   * @returns Time limit in seconds (clamped between 3 and 30)
    */
   static calculateDynamicTimeLimit(
     enemyLevel: number,
-    questionElo: number | null
+    questionElo: number | null,
+    timeBonus: number = 0
   ): number {
     // Question level = 11 - ELO (lower ELO = harder question = higher level)
     const questionLevel = questionElo !== null ? 11 - questionElo : 6; // Default to middle if no ELO
     const levelDifference = enemyLevel - questionLevel;
-    // Clamp between 3 and 25 seconds
-    return Math.max(3, Math.min(25, 13 - levelDifference));
+    // Base time + equipment bonus, clamped between 3 and 30 seconds
+    const baseTime = 13 - levelDifference;
+    return Math.max(3, Math.min(30, baseTime + timeBonus));
   }
 
   /**

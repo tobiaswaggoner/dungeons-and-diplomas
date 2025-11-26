@@ -14,6 +14,7 @@ import FloatingXpBubble from './FloatingXpBubble';
 import InventoryModal, { Equipment, Item, EquipmentSlot } from './InventoryModal';
 import ItemDropNotification from './ItemDropNotification';
 import type { DroppedItem, ItemDefinition } from '@/lib/items';
+import { calculateEquipmentBonuses } from '@/lib/items';
 import { useAuth } from '@/hooks/useAuth';
 import { useScoring } from '@/hooks/useScoring';
 import { useCombat } from '@/hooks/useCombat';
@@ -32,12 +33,12 @@ export default function GameCanvas() {
 
   // Inventory system
   const [equipment, setEquipment] = useState<Equipment>({
-    head: null,
-    chest: null,
-    legs: null,
-    feet: null,
-    mainHand: null,
-    offHand: null,
+    helm: null,
+    brustplatte: null,
+    schwert: null,
+    schild: null,
+    hose: null,
+    schuhe: null,
   });
   const [inventory, setInventory] = useState<Item[]>([]);
 
@@ -194,15 +195,8 @@ export default function GameCanvas() {
     // Store for later if dungeonManager not ready
     pendingItemDropRef.current = droppedItem;
 
-    // Convert to inventory item format
-    const inventoryItem: Item = {
-      id: droppedItem.item.id,
-      name: droppedItem.item.name,
-      slot: droppedItem.item.slot,
-    };
-
-    // Add directly to inventory
-    setInventory(prev => [...prev, inventoryItem]);
+    // Add item directly to inventory (droppedItem.item is already a full ItemDefinition)
+    setInventory(prev => [...prev, droppedItem.item]);
 
     // Show notification
     setItemDropNotification({ item: droppedItem.item, id: droppedItem.id });
@@ -262,6 +256,20 @@ export default function GameCanvas() {
     maxHp: PLAYER_MAX_HP
   });
 
+  // Calculate equipment bonuses whenever equipment changes
+  const equipmentBonuses = calculateEquipmentBonuses(equipment);
+
+  // Update player maxHp when equipment changes
+  useEffect(() => {
+    const newMaxHp = PLAYER_MAX_HP + equipmentBonuses.maxHpBonus;
+    playerRef.current.maxHp = newMaxHp;
+    // If current HP exceeds new max, clamp it
+    if (playerRef.current.hp > newMaxHp) {
+      playerRef.current.hp = newMaxHp;
+      setPlayerHp(newMaxHp);
+    }
+  }, [equipmentBonuses.maxHpBonus]);
+
   // Combat - initialized first so we have inCombatRef and startCombat
   const combat = useCombat({
     questionDatabase,
@@ -272,6 +280,7 @@ export default function GameCanvas() {
     onGameRestart: () => gameState.generateNewDungeon(),
     onXpGained: handleXpGained,
     onItemDropped: handleItemDropped,
+    equipmentBonuses,
     tileSize: 64
   });
 
@@ -283,6 +292,7 @@ export default function GameCanvas() {
     onPlayerHpUpdate: setPlayerHp,
     onXpGained: handleXpGained,
     onTreasureCollected: handleTreasureCollected,
+    onItemDropped: handleItemDropped,
     inCombatRef: combat.inCombatRef,
     onStartCombat: combat.startCombat,
     playerRef

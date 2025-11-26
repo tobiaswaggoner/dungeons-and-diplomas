@@ -19,6 +19,8 @@ interface UseGameStateProps {
   onPlayerHpUpdate: (hp: number) => void;
   onXpGained?: (amount: number) => void;
   onTreasureCollected?: (screenX: number, screenY: number, xpAmount: number) => void;
+  /** Callback when an item is dropped (from treasures) */
+  onItemDropped?: (item: any) => void;
   /** Reference to combat state (injected from useCombat) */
   inCombatRef?: React.MutableRefObject<boolean>;
   /** Callback when combat should start (injected from useCombat) */
@@ -36,6 +38,7 @@ export function useGameState({
   onPlayerHpUpdate,
   onXpGained,
   onTreasureCollected,
+  onItemDropped,
   inCombatRef: externalInCombatRef,
   onStartCombat,
   playerRef: externalPlayerRef,
@@ -97,7 +100,8 @@ export function useGameState({
     canvasRef,
     dungeonManagerRef,
     onXpGained,
-    onTreasureCollected
+    onTreasureCollected,
+    onItemDropped
   });
 
   const update = (dt: number) => {
