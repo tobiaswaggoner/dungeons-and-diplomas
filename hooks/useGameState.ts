@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { Player } from '@/lib/enemy';
 import type { QuestionDatabase } from '@/lib/questions';
-import { DIRECTION, PLAYER_MAX_HP } from '@/lib/constants';
+import { DIRECTION, PLAYER_MAX_HP, INITIAL_PLAYER_BUFFS } from '@/lib/constants';
 import type { GameStateConfig } from '@/lib/types/gameState';
 import { resolveConfig } from '@/lib/types/gameState';
 import type { DungeonManager } from '@/lib/game/DungeonManager';
@@ -11,6 +11,7 @@ import type { MinimapRenderer } from '@/lib/rendering/MinimapRenderer';
 import { useKeyboardInput } from './useKeyboardInput';
 import { useTreasureCollection } from './useTreasureCollection';
 import { useFootsteps } from './useFootsteps';
+import { updateShieldRegen, updateHpRegen } from '@/lib/buff';
 
 interface UseGameStateProps {
   questionDatabase: QuestionDatabase | null;
@@ -65,7 +66,8 @@ export function useGameState({
     direction: DIRECTION.DOWN,
     isMoving: false,
     hp: PLAYER_MAX_HP,
-    maxHp: PLAYER_MAX_HP
+    maxHp: PLAYER_MAX_HP,
+    buffs: { ...INITIAL_PLAYER_BUFFS }
   });
   const playerRef = externalPlayerRef || fallbackPlayerRef;
 
@@ -144,6 +146,10 @@ export function useGameState({
     if (!inCombatRef.current) {
       updateFootsteps(playerRef.current, manager.enemies, manager.tileSize);
     }
+
+    // Update buff regeneration (shield + HP)
+    updateShieldRegen(playerRef.current, dt);
+    updateHpRegen(playerRef.current, dt);
   };
 
   const render = () => {
@@ -165,7 +171,8 @@ export function useGameState({
         manager.tileSize,
         manager.renderMap,
         manager.doorStates,
-        manager.darkTheme
+        manager.darkTheme,
+        manager.shrines
       );
     }
 

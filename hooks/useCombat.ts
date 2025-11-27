@@ -13,6 +13,7 @@ import { useTimer } from './useTimer';
 import { type Clock, defaultClock } from '@/lib/time';
 import { logHookError } from '@/lib/hooks';
 import { generateEnemyLoot, generateBossLoot, isBoss, type DroppedItem, type EquipmentBonuses, DEFAULT_BONUSES } from '@/lib/items';
+import { applyDamageToPlayer, getTimeBonus, getDamageBoost, getDamageReduction } from '@/lib/buff';
 
 interface UseCombatProps {
   questionDatabase: QuestionDatabase | null;
@@ -23,8 +24,16 @@ interface UseCombatProps {
   onGameRestart: () => void;
   onXpGained?: (amount: number) => void;
   onItemDropped?: (item: DroppedItem) => void;
+  /** Called when an enemy is defeated flawlessly (no wrong answers) - used for combo tracking */
+  onEnemyDefeatedFlawless?: () => void;
+  /** Called when combo should be reset (wrong answer breaks combo) */
+  onComboBreak?: () => void;
+  /** Called when a shrine enemy is defeated - used for shrine completion tracking */
+  onShrineEnemyDefeated?: (enemyId: number, shrineId: number) => void;
   /** Equipment bonuses from currently equipped items */
   equipmentBonuses?: EquipmentBonuses;
+  /** Bonus damage from combo system */
+  comboBonus?: number;
   tileSize?: number;
   clock?: Clock;
 }
@@ -38,7 +47,11 @@ export function useCombat({
   onGameRestart,
   onXpGained,
   onItemDropped,
+  onEnemyDefeatedFlawless,
+  onComboBreak,
+  onShrineEnemyDefeated,
   equipmentBonuses = DEFAULT_BONUSES,
+  comboBonus = 0,
   tileSize = 64,
   clock = defaultClock
 }: UseCombatProps) {
@@ -46,6 +59,9 @@ export function useCombat({
 
   // Ref to track current inCombat state for synchronous access in game loop
   const inCombatRef = useRef(false);
+
+  // Ref to track if current combat is flawless (no wrong answers)
+  const flawlessCombatRef = useRef(true);
 
   // Keep inCombatRef in sync with reducer state
   useEffect(() => {
@@ -105,6 +121,17 @@ export function useCombat({
           onItemDropped(droppedItem);
         }
 
+        // Trigger combo increment only if combat was flawless (no wrong answers)
+        if (flawlessCombatRef.current && onEnemyDefeatedFlawless) {
+          onEnemyDefeatedFlawless();
+        }
+
+        // Notify shrine system if this was a shrine enemy
+        if (enemy.isFromShrine && enemy.shrineId !== null && onShrineEnemyDefeated) {
+          console.log(`[useCombat] Shrine enemy defeated: id=${enemy.id}, shrineId=${enemy.shrineId}`);
+          onShrineEnemyDefeated(enemy.id, enemy.shrineId);
+        }
+
         dispatch({ type: 'SHOW_VICTORY', xp: xpReward });
         return;
       } catch (error) {
@@ -117,7 +144,7 @@ export function useCombat({
     } else {
       dispatch({ type: 'END_COMBAT' });
     }
-  }, [state.enemy, state.playerElo, userId, onXpGained, onItemDropped, tileSize, stopTimer, playerRef]);
+  }, [state.enemy, state.playerElo, userId, onXpGained, onItemDropped, onEnemyDefeatedFlawless, onShrineEnemyDefeated, tileSize, stopTimer, playerRef]);
 
   const askQuestion = useCallback(async () => {
     const enemy = state.enemy;
@@ -142,8 +169,9 @@ export function useCombat({
         return;
       }
 
-      // Apply time bonus from equipment
-      const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo, equipmentBonuses.timeBonus);
+      // Apply time bonus from equipment + buffs
+      const totalTimeBonus = equipmentBonuses.timeBonus + getTimeBonus(playerRef.current);
+      const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo, totalTimeBonus);
 
       dispatch({
         type: 'ASK_QUESTION',
@@ -169,8 +197,25 @@ export function useCombat({
     const answerTimeMs = clock.now() - state.questionStartTime;
     const isTimeout = selectedIndex === -1;
 
-    // Apply equipment bonuses to combat calculations
-    const result = CombatEngine.processAnswer(selectedIndex, question, state.playerElo, enemy.level, equipmentBonuses);
+    // Combine equipment bonuses with buff bonuses
+    const combinedBonuses: EquipmentBonuses = {
+      ...equipmentBonuses,
+      damageBonus: equipmentBonuses.damageBonus + getDamageBoost(playerRef.current),
+      damageReduction: equipmentBonuses.damageReduction + getDamageReduction(playerRef.current),
+      timeBonus: equipmentBonuses.timeBonus + getTimeBonus(playerRef.current),
+    };
+
+    // Apply equipment bonuses and combo bonus to combat calculations
+    const result = CombatEngine.processAnswer(selectedIndex, question, state.playerElo, enemy.level, combinedBonuses, comboBonus);
+
+    // Track flawless status - wrong answer or timeout breaks the combo
+    if (!result.isCorrect) {
+      flawlessCombatRef.current = false;
+      // Break combo immediately on wrong answer
+      if (onComboBreak) {
+        onComboBreak();
+      }
+    }
 
     // Track answer in database
     if (userId && question.id) {
@@ -193,8 +238,8 @@ export function useCombat({
 
     // Apply damage
     if (result.targetedPlayer) {
-      playerRef.current.hp -= result.damage;
-      if (playerRef.current.hp < 0) playerRef.current.hp = 0;
+      // Use buff system for damage with shield absorption
+      applyDamageToPlayer(playerRef.current, result.damage);
       onPlayerHpUpdate(playerRef.current.hp);
     } else {
       enemy.takeDamage(result.damage);
@@ -212,7 +257,7 @@ export function useCombat({
     } else {
       setTimeout(() => askQuestion(), COMBAT_FEEDBACK_DELAY);
     }
-  }, [state.question, state.enemy, state.questionStartTime, state.subject, state.playerElo, userId, clock, stopTimer, loadPlayerElo, onUpdateSessionScores, onPlayerHpUpdate, playerRef, endCombat, askQuestion, equipmentBonuses]);
+  }, [state.question, state.enemy, state.questionStartTime, state.subject, state.playerElo, userId, clock, stopTimer, loadPlayerElo, onUpdateSessionScores, onPlayerHpUpdate, playerRef, endCombat, askQuestion, equipmentBonuses, onComboBreak]);
 
   // Update timeout ref when answerQuestion changes
   useEffect(() => {
@@ -226,6 +271,9 @@ export function useCombat({
       logHookError('useCombat', new Error('Question database or user not loaded yet'), 'Cannot start combat');
       return;
     }
+
+    // Reset flawless tracking for new combat
+    flawlessCombatRef.current = true;
 
     const subjectDisplay = questionDatabase[enemy.subject]?.subject || enemy.subject;
     dispatch({ type: 'START_COMBAT', enemy, subjectDisplay });
@@ -248,8 +296,9 @@ export function useCombat({
           return;
         }
 
-        // Apply time bonus from equipment
-        const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo, equipmentBonuses.timeBonus);
+        // Apply time bonus from equipment + buffs
+        const totalTimeBonus = equipmentBonuses.timeBonus + getTimeBonus(playerRef.current);
+        const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo, totalTimeBonus);
 
         dispatch({
           type: 'ASK_QUESTION',

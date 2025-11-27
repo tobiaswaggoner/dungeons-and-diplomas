@@ -1,4 +1,4 @@
-import type { TileType, Room } from '../constants';
+import type { TileType, Room, Shrine } from '../constants';
 import type { Player } from '../enemy';
 import { SpriteSheetLoader } from '../SpriteSheetLoader';
 import { Enemy } from '../enemy';
@@ -14,6 +14,63 @@ import { RENDER_COLORS } from '../ui/colors';
  */
 export class GameRenderer {
   private tileRenderer = getTileRenderer();
+  private pulsePhase = 0;
+  private shrineImage: HTMLImageElement | null = null;
+  private shrineImageLoaded = false;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      this.shrineImage = new Image();
+      this.shrineImage.onload = () => {
+        this.shrineImageLoaded = true;
+      };
+      this.shrineImage.src = '/Assets/shrine.png';
+    }
+  }
+
+  /**
+   * Render all shrines visible in player's rooms
+   */
+  private renderShrines(
+    ctx: CanvasRenderingContext2D,
+    shrines: Shrine[],
+    rooms: Room[],
+    tileSize: number,
+    playerRoomIds: Set<number>
+  ): void {
+    this.pulsePhase += 0.05;
+    if (this.pulsePhase > Math.PI * 2) {
+      this.pulsePhase = 0;
+    }
+
+    for (const shrine of shrines) {
+      if (!rooms[shrine.roomId]?.visible) continue;
+
+      const screenX = shrine.x * tileSize;
+      const screenY = shrine.y * tileSize;
+      const spriteSize = tileSize * 2;
+
+      ctx.save();
+
+      if (shrine.isActivated) {
+        ctx.globalAlpha = 0.5;
+        ctx.filter = 'grayscale(100%)';
+      } else if (shrine.isActive) {
+        ctx.shadowColor = '#ff4444';
+        ctx.shadowBlur = 25;
+      } else {
+        const glowIntensity = 10 + Math.sin(this.pulsePhase) * 5;
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = glowIntensity;
+      }
+
+      if (this.shrineImageLoaded && this.shrineImage) {
+        ctx.drawImage(this.shrineImage, screenX, screenY, spriteSize, spriteSize);
+      }
+
+      ctx.restore();
+    }
+  }
 
   /**
    * Render all enemies visible in player's rooms
@@ -57,7 +114,8 @@ export class GameRenderer {
     tileSize: number,
     renderMap: RenderMap,
     doorStates: Map<string, boolean>,
-    darkTheme: TileTheme | null
+    darkTheme: TileTheme | null,
+    shrines: Shrine[] = []
   ) {
     const ctx = getContext2D(canvas);
     if (!ctx) {
@@ -76,35 +134,30 @@ export class GameRenderer {
     ctx.save();
     ctx.translate(-Math.floor(camX), -Math.floor(camY));
 
-    // Clear with black
     ctx.fillStyle = RENDER_COLORS.BACKGROUND;
     ctx.fillRect(Math.floor(camX), Math.floor(camY), canvas.width, canvas.height);
 
-    // Calculate visible tile range
     const startCol = Math.floor(camX / tileSize);
     const endCol = startCol + Math.ceil(canvas.width / tileSize) + 1;
     const startRow = Math.floor(camY / tileSize);
     const endRow = startRow + Math.ceil(canvas.height / tileSize) + 1;
 
-    // Get player's current room(s) for visibility calculations
     const playerRoomIds = VisibilityCalculator.getPlayerRoomIds(player, tileSize, roomMap, dungeonWidth, dungeonHeight);
 
-    // Pass 1: Render tiles (delegated to TileRenderer)
     this.tileRenderer.renderTiles(
       ctx, dungeon, roomMap, rooms, enemies, tileSize, renderMap, doorStates, darkTheme,
       startCol, endCol, startRow, endRow, dungeonWidth, dungeonHeight
     );
 
-    // Pass 2: Render fog of war dimming (delegated to TileRenderer)
     this.tileRenderer.renderFogOfWar(
       ctx, dungeon, roomMap, rooms, playerRoomIds, tileSize,
       startCol, endCol, startRow, endRow, dungeonWidth, dungeonHeight
     );
 
-    // Pass 3: Render enemies
+    this.renderShrines(ctx, shrines, rooms, tileSize, playerRoomIds);
+
     this.renderEnemies(ctx, enemies, rooms, tileSize, player, playerRoomIds);
 
-    // Pass 4: Render player
     this.renderPlayer(ctx, playerSprite, player, tileSize);
 
     ctx.restore();

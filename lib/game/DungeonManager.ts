@@ -4,7 +4,7 @@
  * Coordinates dungeon state and orchestrates initialization.
  * Delegates to specialized modules:
  * - DungeonInitializer: Structure generation
- * - EntitySpawner: Player/Enemy/Treasure spawning
+ * - EntitySpawner: Player/Enemy/Treasure/Shrine spawning
  * - ThemeLoader: Theme loading (lib/tiletheme)
  */
 import {
@@ -12,14 +12,14 @@ import {
   ANIMATION,
   DEFAULT_DUNGEON_CONFIG
 } from '../constants';
-import type { TileType, TileVariant, Room, DungeonConfig } from '../constants';
+import type { TileType, TileVariant, Room, DungeonConfig, Shrine } from '../constants';
 import type { Player } from '../enemy';
 import { SpriteSheetLoader } from '../SpriteSheetLoader';
 import { Enemy } from '../enemy';
 import type { TileTheme, ImportedTileset, RenderMap } from '../tiletheme/types';
 import { ThemeLoader } from '../tiletheme/ThemeLoader';
 import { generateDungeonStructure } from './DungeonInitializer';
-import { spawnPlayer, spawnEnemies, spawnTreasures } from './EntitySpawner';
+import { spawnPlayer, spawnEnemies, spawnTreasures, createShrines } from './EntitySpawner';
 import type { DroppedItem } from '../items/types';
 
 export class DungeonManager {
@@ -37,6 +37,7 @@ export class DungeonManager {
   public playerSprite: SpriteSheetLoader | null = null;
   public treasures: Set<string> = new Set();
   public droppedItems: DroppedItem[] = [];
+  public shrines: Shrine[] = [];
 
   // Rendering
   public tileSize: number = 64;
@@ -134,5 +135,6 @@ export class DungeonManager {
     spawnPlayer(this.player, spawnContext);
     this.enemies = await spawnEnemies(spawnContext, availableSubjects, userId, this.player);
     this.treasures = spawnTreasures(spawnContext);
+    this.shrines = createShrines(spawnContext);
   }
 }

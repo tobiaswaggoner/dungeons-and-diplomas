@@ -40,6 +40,7 @@ export class CombatEngine {
    * @param playerElo The player's current ELO for this subject
    * @param enemyLevel The enemy's level
    * @param equipmentBonuses Optional equipment bonuses (damage, reduction, etc.)
+   * @param comboBonus Optional combo bonus damage (from defeating enemies in a row)
    * @returns The result of the answer including damage and feedback
    */
   static processAnswer(
@@ -47,21 +48,25 @@ export class CombatEngine {
     question: SelectedQuestion,
     playerElo: number,
     enemyLevel: number,
-    equipmentBonuses: EquipmentBonuses = NO_BONUSES
+    equipmentBonuses: EquipmentBonuses = NO_BONUSES,
+    comboBonus: number = 0
   ): AnswerResult {
     const isTimeout = selectedIndex === -1;
     const isCorrect = selectedIndex === question.correctIndex;
     const correctAnswerText = question.shuffledAnswers[question.correctIndex];
 
     if (isCorrect) {
-      // Apply damage bonus from equipment
-      const damage = calculatePlayerDamage(playerElo, enemyLevel, equipmentBonuses.damageBonus);
+      // Apply damage bonus from equipment + combo
+      const totalDamageBonus = equipmentBonuses.damageBonus + comboBonus;
+      const damage = calculatePlayerDamage(playerElo, enemyLevel, totalDamageBonus);
+      // Show combo bonus in feedback if active
+      const comboText = comboBonus > 0 ? ` (+${comboBonus} Kombo)` : '';
       return {
         isCorrect: true,
         isTimeout: false,
         damage,
         targetedPlayer: false,
-        feedbackMessage: `✓ Richtig! ${damage} Schaden!`,
+        feedbackMessage: `✓ Richtig! ${damage} Schaden!${comboText}`,
         correctAnswerText
       };
     } else {
