@@ -6,10 +6,11 @@ import {
   PLAYER_SPEED_TILES,
   DIRECTION_OFFSETS
 } from '../constants';
-import type { TileType, Room } from '../constants';
+import type { TileType, Room, Shrine } from '../constants';
 import type { Player } from '../enemy';
 import { Enemy } from '../enemy';
 import { CollisionDetector } from '../physics/CollisionDetector';
+import { checkShrineCollision } from '../physics/ShrineCollision';
 import { getEntityTilePosition } from '../physics/TileCoordinates';
 import { DirectionCalculator } from '../movement/DirectionCalculator';
 import type { UpdatePlayerContext, UpdateEnemiesContext } from '../types/game';
@@ -31,9 +32,20 @@ export class GameEngine {
     y: number,
     tileSize: number,
     dungeon: TileType[][],
-    doorStates: Map<string, boolean>
+    doorStates: Map<string, boolean>,
+    shrines?: Shrine[]
   ): boolean {
-    return CollisionDetector.checkPlayerCollision(x, y, tileSize, dungeon, doorStates);
+    // Check tile collision first
+    if (CollisionDetector.checkPlayerCollision(x, y, tileSize, dungeon, doorStates)) {
+      return true;
+    }
+    // Check shrine collision if shrines are provided
+    if (shrines && shrines.length > 0) {
+      if (checkShrineCollision(x, y, tileSize, shrines)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public updateFogOfWar(
@@ -152,7 +164,8 @@ export class GameEngine {
       doorStates,
       enemies,
       treasures,
-      onTreasureCollected
+      onTreasureCollected,
+      shrines
     } = ctx;
 
     if (inCombat) return;
@@ -201,11 +214,11 @@ export class GameEngine {
       const newX = player.x + dx;
       const newY = player.y + dy;
 
-      // Use player collision that respects door states
-      if (!this.checkPlayerCollision(newX, player.y, tileSize, dungeon, doorStates)) {
+      // Use player collision that respects door states and shrines
+      if (!this.checkPlayerCollision(newX, player.y, tileSize, dungeon, doorStates, shrines)) {
         player.x = newX;
       }
-      if (!this.checkPlayerCollision(player.x, newY, tileSize, dungeon, doorStates)) {
+      if (!this.checkPlayerCollision(player.x, newY, tileSize, dungeon, doorStates, shrines)) {
         player.y = newY;
       }
 

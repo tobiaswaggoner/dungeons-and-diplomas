@@ -126,7 +126,8 @@ export function useGameState({
       doorStates: manager.doorStates,
       enemies: manager.enemies,
       treasures: manager.treasures,
-      onTreasureCollected: handleTreasureCollected
+      onTreasureCollected: handleTreasureCollected,
+      shrines: manager.shrines
     });
 
     engine.updateEnemies({

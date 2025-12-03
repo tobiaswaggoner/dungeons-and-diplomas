@@ -5,7 +5,7 @@ import type { QuestionDatabase } from '@/lib/questions';
 import { COMBAT_FEEDBACK_DELAY, PLAYER_MAX_HP } from '@/lib/constants';
 import { selectQuestionFromPool } from '@/lib/combat/QuestionSelector';
 import { calculateEnemyXpReward } from '@/lib/scoring/LevelCalculator';
-import { CombatEngine } from '@/lib/combat/CombatEngine';
+import { CombatEngine, calculateHint } from '@/lib/combat/CombatEngine';
 import { combatReducer, initialCombatState, isInCombat } from '@/lib/combat/combatReducer';
 import { api } from '@/lib/api';
 import { loadSubjectElo, findSubjectElo, DEFAULT_ELO } from '@/lib/scoring/EloService';
@@ -89,7 +89,10 @@ export function useCombat({
 
     const enemy = state.enemy;
     if (enemy && !enemy.alive && userId) {
-      const xpReward = calculateEnemyXpReward(enemy.level, state.playerElo);
+      const baseXpReward = calculateEnemyXpReward(enemy.level, state.playerElo);
+      // Apply XP bonus from equipment (xpBonus is a percentage, e.g., 10 = +10% XP)
+      const xpMultiplier = 1 + (equipmentBonuses.xpBonus / 100);
+      const xpReward = Math.round(baseXpReward * xpMultiplier);
 
       try {
         await api.xp.addXp({
@@ -144,7 +147,7 @@ export function useCombat({
     } else {
       dispatch({ type: 'END_COMBAT' });
     }
-  }, [state.enemy, state.playerElo, userId, onXpGained, onItemDropped, onEnemyDefeatedFlawless, onShrineEnemyDefeated, tileSize, stopTimer, playerRef]);
+  }, [state.enemy, state.playerElo, userId, onXpGained, onItemDropped, onEnemyDefeatedFlawless, onShrineEnemyDefeated, tileSize, stopTimer, playerRef, equipmentBonuses.xpBonus]);
 
   const askQuestion = useCallback(async () => {
     const enemy = state.enemy;
@@ -173,10 +176,14 @@ export function useCombat({
       const totalTimeBonus = equipmentBonuses.timeBonus + getTimeBonus(playerRef.current);
       const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo, totalTimeBonus);
 
+      // Calculate hint based on hint chance from equipment
+      const hintedAnswerIndex = calculateHint(question, equipmentBonuses.hintChance);
+
       dispatch({
         type: 'ASK_QUESTION',
         question,
-        questionStartTime: clock.now()
+        questionStartTime: clock.now(),
+        hintedAnswerIndex
       });
 
       handleTimeoutRef.current = () => answerQuestion(-1);
@@ -185,7 +192,7 @@ export function useCombat({
       logHookError('useCombat', error, 'Failed to fetch questions');
       dispatch({ type: 'END_COMBAT' });
     }
-  }, [state.enemy, state.askedQuestionIds, questionDatabase, userId, playerRef, clock, startTimer, endCombat, equipmentBonuses.timeBonus]);
+  }, [state.enemy, state.askedQuestionIds, questionDatabase, userId, playerRef, clock, startTimer, endCombat, equipmentBonuses.timeBonus, equipmentBonuses.hintChance]);
 
   const answerQuestion = useCallback(async (selectedIndex: number) => {
     stopTimer();
@@ -300,10 +307,14 @@ export function useCombat({
         const totalTimeBonus = equipmentBonuses.timeBonus + getTimeBonus(playerRef.current);
         const dynamicTimeLimit = CombatEngine.calculateDynamicTimeLimit(enemy.level, question.elo, totalTimeBonus);
 
+        // Calculate hint based on hint chance from equipment
+        const hintedAnswerIndex = calculateHint(question, equipmentBonuses.hintChance);
+
         dispatch({
           type: 'ASK_QUESTION',
           question,
-          questionStartTime: clock.now()
+          questionStartTime: clock.now(),
+          hintedAnswerIndex
         });
 
         handleTimeoutRef.current = () => answerQuestion(-1);
@@ -313,7 +324,7 @@ export function useCombat({
         dispatch({ type: 'END_COMBAT' });
       }
     }, 0);
-  }, [questionDatabase, userId, playerRef, clock, startTimer, answerQuestion, equipmentBonuses.timeBonus]);
+  }, [questionDatabase, userId, playerRef, clock, startTimer, answerQuestion, equipmentBonuses.timeBonus, equipmentBonuses.hintChance]);
 
   const handleVictoryComplete = useCallback(() => {
     dispatch({ type: 'DISMISS_VICTORY' });
@@ -346,6 +357,7 @@ export function useCombat({
     victoryXp: state.victoryXp,
     showDefeat,
     handleVictoryComplete,
-    handleDefeatRestart
+    handleDefeatRestart,
+    hintedAnswerIndex: state.hintedAnswerIndex
   };
 }

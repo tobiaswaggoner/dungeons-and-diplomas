@@ -2,9 +2,11 @@ interface CombatAnswersProps {
   answers: string[];
   onSelectAnswer: (index: number) => void;
   isHidden: boolean;
+  /** Index of wrong answer to grey out as hint, -1 if no hint */
+  hintedAnswerIndex?: number;
 }
 
-export default function CombatAnswers({ answers, onSelectAnswer, isHidden }: CombatAnswersProps) {
+export default function CombatAnswers({ answers, onSelectAnswer, isHidden, hintedAnswerIndex = -1 }: CombatAnswersProps) {
   return (
     <>
       <style jsx>{`
@@ -39,6 +41,25 @@ export default function CombatAnswers({ answers, onSelectAnswer, isHidden }: Com
           border-radius: 50%;
           box-shadow: inset 0 1px 2px rgba(0,0,0,0.8);
         }
+
+        .hinted-answer {
+          opacity: 0.4;
+          filter: grayscale(50%);
+          text-decoration: line-through;
+          pointer-events: none;
+          position: relative;
+        }
+
+        .hinted-answer::after {
+          content: '✗';
+          position: absolute;
+          right: 20px;
+          top: 50%;
+          transform: translateY(-50%);
+          font-size: 28px;
+          color: #ff4444;
+          text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+        }
       `}</style>
 
       <div style={{
@@ -56,17 +77,20 @@ export default function CombatAnswers({ answers, onSelectAnswer, isHidden }: Com
         transition: 'opacity 0.3s ease',
         pointerEvents: isHidden ? 'none' : 'auto'
       }}>
-        {answers.map((answer, index) => (
+        {answers.map((answer, index) => {
+          const isHinted = index === hintedAnswerIndex;
+          return (
           <button
             key={index}
-            onClick={() => onSelectAnswer(index)}
-            className="wood-texture"
+            onClick={() => !isHinted && onSelectAnswer(index)}
+            className={`wood-texture${isHinted ? ' hinted-answer' : ''}`}
+            disabled={isHinted}
             style={{
               padding: '20px 30px',
               borderRadius: '10px',
               border: '5px solid #2a1810',
               boxShadow: '0 6px 12px rgba(0,0,0,0.7), inset 0 2px 4px rgba(255,255,255,0.1)',
-              cursor: 'pointer',
+              cursor: isHinted ? 'not-allowed' : 'pointer',
               transition: 'all 0.2s',
               position: 'relative',
               textAlign: 'left',
@@ -80,12 +104,16 @@ export default function CombatAnswers({ answers, onSelectAnswer, isHidden }: Com
               gap: '15px'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-3px)';
-              e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.9), inset 0 2px 4px rgba(255,255,255,0.2)';
+              if (!isHinted) {
+                e.currentTarget.style.transform = 'translateY(-3px)';
+                e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.9), inset 0 2px 4px rgba(255,255,255,0.2)';
+              }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.7), inset 0 2px 4px rgba(255,255,255,0.1)';
+              if (!isHinted) {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.7), inset 0 2px 4px rgba(255,255,255,0.1)';
+              }
             }}
           >
             {/* Letter badge */}
@@ -115,7 +143,8 @@ export default function CombatAnswers({ answers, onSelectAnswer, isHidden }: Com
             <div className="metal-corner" style={{ bottom: '-7px', left: '-7px' }} />
             <div className="metal-corner" style={{ bottom: '-7px', right: '-7px' }} />
           </button>
-        ))}
+          );
+        })}
       </div>
     </>
   );

@@ -3,6 +3,36 @@ import { calculatePlayerDamage, calculateEnemyDamage } from './DamageCalculator'
 import type { EquipmentBonuses } from '@/lib/items';
 
 /**
+ * Calculate hint for a question based on hint chance
+ * Returns the index of a wrong answer to grey out, or -1 if no hint
+ *
+ * @param question The question to hint
+ * @param hintChance Hint chance percentage (0-100)
+ * @returns Index of wrong answer to hint, or -1
+ */
+export function calculateHint(question: SelectedQuestion, hintChance: number): number {
+  // Roll for hint
+  if (Math.random() * 100 >= hintChance) {
+    return -1; // No hint this time
+  }
+
+  // Find wrong answer indices
+  const wrongIndices: number[] = [];
+  for (let i = 0; i < question.shuffledAnswers.length; i++) {
+    if (i !== question.correctIndex) {
+      wrongIndices.push(i);
+    }
+  }
+
+  if (wrongIndices.length === 0) {
+    return -1;
+  }
+
+  // Return a random wrong answer index to hint
+  return wrongIndices[Math.floor(Math.random() * wrongIndices.length)];
+}
+
+/**
  * Result of processing a combat answer
  */
 export interface AnswerResult {

@@ -1,4 +1,5 @@
 import type { TileType, Room, Shrine } from '../constants';
+import { SHRINE_RENDER_SIZE } from '../constants';
 import type { Player } from '../enemy';
 import { SpriteSheetLoader } from '../SpriteSheetLoader';
 import { Enemy } from '../enemy';
@@ -46,9 +47,13 @@ export class GameRenderer {
     for (const shrine of shrines) {
       if (!rooms[shrine.roomId]?.visible) continue;
 
-      const screenX = shrine.x * tileSize;
-      const screenY = shrine.y * tileSize;
-      const spriteSize = tileSize * 2;
+      // Calculate sprite size based on SHRINE_RENDER_SIZE
+      const spriteSize = tileSize * SHRINE_RENDER_SIZE;
+      // Center the sprite on the shrine position
+      const offsetX = (tileSize - spriteSize) / 2;
+      const offsetY = (tileSize - spriteSize) / 2;
+      const screenX = shrine.x * tileSize + offsetX;
+      const screenY = shrine.y * tileSize + offsetY;
 
       ctx.save();
 

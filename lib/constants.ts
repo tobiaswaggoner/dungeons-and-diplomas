@@ -99,7 +99,8 @@ export const SHRINE_MIN_ROOM_SIZE = 5; // minimum room size for shrine
 export const SHRINE_ENEMY_SPAWN_RADIUS = 2.0; // tiles from shrine center
 export const SHRINE_MIN_ENEMIES = 1;
 export const SHRINE_MAX_ENEMIES = 2;
-export const SHRINE_HITBOX_SIZE = 1.5; // tiles
+export const SHRINE_HITBOX_SIZE = 0.7; // tiles - smaller hitbox for collision
+export const SHRINE_RENDER_SIZE = 1.0; // tiles - visual size of shrine
 export const SHRINE_MIN_PLAYER_DISTANCE = 1.5; // minimum distance from player for enemy spawn
 
 // =============================================================================

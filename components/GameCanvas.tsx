@@ -25,11 +25,15 @@ import { useShrine } from '@/hooks/useShrine';
 import { spawnShrineEnemies, type ShrineSpawnContext } from '@/lib/game/EntitySpawner';
 import ComboDisplay from './ComboDisplay';
 import ShrineBuffModal from './ShrineBuffModal';
+import PauseMenu from './PauseMenu';
+import OptionsMenu from './OptionsMenu';
 import { getLevelInfo } from '@/lib/scoring/LevelCalculator';
 import { api } from '@/lib/api';
 import { COLORS } from '@/lib/ui/colors';
 import { selectRandomBuffs, applyBuff, resetPlayerBuffs, resetRegenTimer } from '@/lib/buff';
 import type { Buff } from '@/lib/constants';
+import { useAudioSettings } from '@/hooks/useAudioSettings';
+import { getFootstepManager } from '@/lib/audio';
 
 export default function GameCanvas() {
   const [questionDatabase, setQuestionDatabase] = useState<QuestionDatabase | null>(null);
@@ -56,6 +60,11 @@ export default function GameCanvas() {
   // Shrine buff selection
   const [showBuffSelection, setShowBuffSelection] = useState(false);
   const [buffChoices, setBuffChoices] = useState<Buff[]>([]);
+  const [showPauseMenu, setShowPauseMenu] = useState(false);
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+
+  // Audio settings
+  const audioSettings = useAudioSettings();
 
   // Background music ref
   const bgMusicRef = useRef<HTMLAudioElement | null>(null);
@@ -147,7 +156,8 @@ export default function GameCanvas() {
     if (userId && !bgMusicRef.current) {
       const audio = new Audio('/Assets/Sound/Into%20the%20Abyss.mp3');
       audio.loop = false;
-      audio.volume = 0.07; // Leise Hintergrundmusik
+      // Initial volume will be set by audio settings effect
+      audio.volume = 0.07 * audioSettings.effectiveMusicVolume;
       bgMusicRef.current = audio;
 
       // Get duration when metadata is loaded
@@ -192,6 +202,18 @@ export default function GameCanvas() {
       window.removeEventListener('click', startMusic);
     };
   }, [userId]);
+
+  // Update audio volumes when settings change
+  useEffect(() => {
+    // Update music volume (base volume 0.07 * effective volume)
+    if (bgMusicRef.current) {
+      bgMusicRef.current.volume = 0.07 * audioSettings.effectiveMusicVolume;
+    }
+
+    // Update SFX volume (footsteps)
+    const footstepManager = getFootstepManager();
+    footstepManager.setVolumeMultiplier(audioSettings.effectiveSfxVolume);
+  }, [audioSettings.effectiveMusicVolume, audioSettings.effectiveSfxVolume]);
 
   const handleXpGained = (amount: number) => {
     setUserXp(prev => prev + amount);
@@ -486,6 +508,42 @@ export default function GameCanvas() {
     setShowInventory(false);
   };
 
+  // Pause menu handlers
+  const handleOpenPauseMenu = () => {
+    gameState.gamePausedRef.current = true;
+    setShowPauseMenu(true);
+  };
+
+  const handleClosePauseMenu = () => {
+    gameState.gamePausedRef.current = false;
+    setShowPauseMenu(false);
+  };
+
+  const handlePauseMenuRestart = () => {
+    setShowPauseMenu(false);
+    combo.resetCombo();
+    resetPlayerBuffs(playerRef.current);
+    resetRegenTimer();
+    gameState.generateNewDungeon();
+    gameState.gamePausedRef.current = false;
+  };
+
+  const handlePauseMenuMainMenu = () => {
+    setShowPauseMenu(false);
+    gameState.gamePausedRef.current = false;
+    handleLogout();
+  };
+
+  const handlePauseMenuOptions = () => {
+    setShowPauseMenu(false);
+    setShowOptionsMenu(true);
+  };
+
+  const handleOptionsBack = () => {
+    setShowOptionsMenu(false);
+    setShowPauseMenu(true);
+  };
+
   // Handle game restart - resets combo, buffs, and generates new dungeon
   const handleRestart = () => {
     combo.resetCombo();
@@ -508,10 +566,11 @@ export default function GameCanvas() {
     }
   }, [playerRef, gameState.gamePausedRef]);
 
-  // Keyboard handler for inventory (I key)
+  // Keyboard handler for inventory (I key) and pause menu (ESC)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'i' && !showLogin && !combat.inCombat) {
+      // Inventory toggle with I key
+      if (e.key.toLowerCase() === 'i' && !showLogin && !combat.inCombat && !showPauseMenu && !showOptionsMenu) {
         if (showInventory) {
           handleCloseInventory();
         } else {
@@ -520,15 +579,30 @@ export default function GameCanvas() {
           handleOpenInventory();
         }
       }
-      // ESC to close inventory
-      if (e.key === 'Escape' && showInventory) {
-        handleCloseInventory();
+
+      // ESC key handling
+      if (e.key === 'Escape' && !showLogin) {
+        // Close modals in priority order
+        if (showOptionsMenu) {
+          // Go back to pause menu from options
+          handleOptionsBack();
+        } else if (showInventory) {
+          handleCloseInventory();
+        } else if (showSkillDashboard) {
+          handleCloseSkills();
+        } else if (showPauseMenu) {
+          // Close pause menu
+          handleClosePauseMenu();
+        } else if (!combat.inCombat && !showBuffSelection) {
+          // Open pause menu (only when not in combat or buff selection)
+          handleOpenPauseMenu();
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showInventory, showLogin, showSkillDashboard, combat.inCombat]);
+  }, [showInventory, showLogin, showSkillDashboard, combat.inCombat, showPauseMenu, showBuffSelection, showOptionsMenu]);
 
   const handleLoginWithElo = async (id: number, name: string, xp?: number) => {
     await handleLogin(id, name, xp);
@@ -647,6 +721,7 @@ export default function GameCanvas() {
             combatQuestion={combat.combatQuestion}
             combatFeedback={combat.combatFeedback}
             onAnswerQuestion={combat.answerQuestion}
+            hintedAnswerIndex={combat.hintedAnswerIndex}
             player={playerRef.current}
             dungeon={gameState.dungeonManagerRef.current?.dungeon}
             roomMap={gameState.dungeonManagerRef.current?.roomMap}
@@ -721,6 +796,27 @@ export default function GameCanvas() {
           <ShrineBuffModal
             buffs={buffChoices}
             onSelectBuff={handleBuffSelected}
+          />
+        )}
+
+        {/* Pause Menu */}
+        {showPauseMenu && (
+          <PauseMenu
+            onResume={handleClosePauseMenu}
+            onOptions={handlePauseMenuOptions}
+            onRestart={handlePauseMenuRestart}
+            onMainMenu={handlePauseMenuMainMenu}
+          />
+        )}
+
+        {/* Options Menu */}
+        {showOptionsMenu && (
+          <OptionsMenu
+            settings={audioSettings.settings}
+            onMasterVolumeChange={audioSettings.setMasterVolume}
+            onMusicVolumeChange={audioSettings.setMusicVolume}
+            onSfxVolumeChange={audioSettings.setSfxVolume}
+            onBack={handleOptionsBack}
           />
         )}
       </div>
