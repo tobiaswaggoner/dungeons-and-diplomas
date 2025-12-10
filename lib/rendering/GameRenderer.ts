@@ -77,18 +77,21 @@ export class GameRenderer {
 
   /**
    * Render attack cone visual indicator
+   * @param aimAngle - Angle in radians toward cursor (0 = right, PI/2 = down)
    */
   private renderAttackCone(
     ctx: CanvasRenderingContext2D,
     player: Player,
     tileSize: number,
-    isAttacking: boolean
+    isAttacking: boolean,
+    aimAngle?: number
   ): void {
     const centerX = player.x + tileSize / 2;
     const centerY = player.y + tileSize / 2;
     const range = PLAYER_ATTACK_RANGE * tileSize;
     const halfAngle = (PLAYER_ATTACK_CONE_ANGLE / 2) * (Math.PI / 180);
-    const direction = this.directionAngles[player.direction];
+    // Use aimAngle if provided (continuous), otherwise fall back to player direction
+    const direction = aimAngle ?? this.directionAngles[player.direction];
 
     ctx.save();
 
@@ -138,7 +141,8 @@ export class GameRenderer {
     doorStates: Map<string, boolean>,
     darkTheme: TileTheme | null,
     trashmobs: Trashmob[] = [],
-    isAttacking: boolean = false
+    isAttacking: boolean = false,
+    aimAngle?: number
   ) {
     const ctx = getContext2D(canvas);
     if (!ctx) {
@@ -189,7 +193,7 @@ export class GameRenderer {
     this.renderTrashmobs(ctx, trashmobs, rooms, tileSize, playerRoomIds);
 
     // Pass 5: Render attack cone (before player so it's behind)
-    this.renderAttackCone(ctx, player, tileSize, isAttacking);
+    this.renderAttackCone(ctx, player, tileSize, isAttacking, aimAngle);
 
     // Pass 6: Render player
     this.renderPlayer(ctx, playerSprite, player, tileSize);

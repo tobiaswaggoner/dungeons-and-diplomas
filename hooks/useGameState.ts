@@ -55,6 +55,9 @@ export function useGameState({
   const isInitializingRef = useRef(false);
   const gameLoopIdRef = useRef<number | null>(null);
   const lastTimeRef = useRef(0);
+  // Track mouse position for continuous aim angle
+  const mousePositionRef = useRef<{ x: number; y: number } | null>(null);
+  const aimAngleRef = useRef<number>(0);
 
   // Player reference - use external if provided, otherwise create local fallback
   const fallbackPlayerRef = useRef<Player>({
@@ -239,7 +242,8 @@ export function useGameState({
         manager.doorStates,
         manager.darkTheme,
         manager.trashmobs,
-        engine.isPlayerAttacking()
+        engine.isPlayerAttacking(),
+        aimAngleRef.current
       );
     }
 
@@ -318,13 +322,45 @@ export function useGameState({
     };
   }, [questionDatabase, availableSubjects, userId]);
 
+  // Mouse move handler for continuous aim tracking
+  useEffect(() => {
+    const handleMouseMove = (e: Event) => {
+      const mouseEvent = e as MouseEvent;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+
+      // Mouse position relative to canvas
+      const canvasMouseX = mouseEvent.clientX - rect.left;
+      const canvasMouseY = mouseEvent.clientY - rect.top;
+
+      // Player center position on screen (camera centers on player)
+      const playerScreenX = canvas.width / 2;
+      const playerScreenY = canvas.height / 2;
+
+      // Calculate angle from player to cursor
+      const dx = canvasMouseX - playerScreenX;
+      const dy = canvasMouseY - playerScreenY;
+      aimAngleRef.current = Math.atan2(dy, dx);
+
+      mousePositionRef.current = { x: mouseEvent.clientX, y: mouseEvent.clientY };
+    };
+
+    config.eventTarget.addEventListener('mousemove', handleMouseMove);
+
+    return () => {
+      config.eventTarget.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
+
   // Mouse click handler for melee attack
   useEffect(() => {
     const handleMouseDown = (e: Event) => {
       // Left mouse button only
       const mouseEvent = e as MouseEvent;
       if (mouseEvent.button === 0) {
-        // Pass mouse coordinates to calculate attack direction toward cursor
+        // Use the continuously tracked aim angle
         handleAttack(mouseEvent.clientX, mouseEvent.clientY);
       }
     };
