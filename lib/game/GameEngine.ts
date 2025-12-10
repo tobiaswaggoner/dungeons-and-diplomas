@@ -17,7 +17,7 @@ import { Trashmob } from '../enemy/Trashmob';
 import { CollisionDetector } from '../physics/CollisionDetector';
 import { getEntityTilePosition } from '../physics/TileCoordinates';
 import { DirectionCalculator } from '../movement/DirectionCalculator';
-import { getTargetsInAttackCone, type PlayerAttackState, createAttackState, canAttack } from '../combat/MeleeAttack';
+import { getTargetsInAttackCone, angleToDirection, type PlayerAttackState, createAttackState, canAttack } from '../combat/MeleeAttack';
 import type { UpdatePlayerContext, UpdateEnemiesContext, UpdateTrashmobsContext } from '../types/game';
 
 export class GameEngine {
@@ -36,11 +36,17 @@ export class GameEngine {
   /**
    * Attempt to perform a melee attack
    * Returns array of hit trashmobs
+   *
+   * @param player - The player performing the attack
+   * @param trashmobs - Array of potential targets
+   * @param tileSize - Tile size in pixels
+   * @param attackAngle - Optional attack angle in radians (toward cursor). If not provided, uses player.direction
    */
   public performAttack(
     player: Player,
     trashmobs: Trashmob[],
-    tileSize: number
+    tileSize: number,
+    attackAngle?: number
   ): Trashmob[] {
     if (!canAttack(this.attackState)) {
       return [];
@@ -51,11 +57,19 @@ export class GameEngine {
     this.attackState.cooldownRemaining = PLAYER_ATTACK_COOLDOWN;
     this.attackState.attackTimeRemaining = PLAYER_ATTACK_DURATION;
 
+    // If attack angle provided, turn player to face that direction
+    if (attackAngle !== undefined) {
+      player.direction = angleToDirection(attackAngle);
+    }
+
+    // Use attack angle if provided, otherwise fall back to player direction
+    const attackDirection = attackAngle ?? player.direction;
+
     // Find targets in attack cone
     const targets = getTargetsInAttackCone(
       player.x,
       player.y,
-      player.direction,
+      attackDirection,
       trashmobs,
       tileSize
     );

@@ -26,7 +26,7 @@ const DIRECTION_ANGLES: Record<Direction, number> = {
  *
  * @param playerX - Player center X position
  * @param playerY - Player center Y position
- * @param playerDirection - Player facing direction
+ * @param playerDirection - Player facing direction OR attack angle in radians
  * @param targetX - Target center X position
  * @param targetY - Target center Y position
  * @param coneAngleDegrees - Attack cone angle in degrees (default: 75)
@@ -35,13 +35,16 @@ const DIRECTION_ANGLES: Record<Direction, number> = {
 export function isInAttackCone(
   playerX: number,
   playerY: number,
-  playerDirection: Direction,
+  playerDirection: Direction | number,
   targetX: number,
   targetY: number,
   coneAngleDegrees: number = PLAYER_ATTACK_CONE_ANGLE
 ): boolean {
   // Get player look direction as angle
-  const lookAngle = DIRECTION_ANGLES[playerDirection];
+  // If number is passed, use it directly as radians; otherwise look up from direction
+  const lookAngle = typeof playerDirection === 'number'
+    ? playerDirection
+    : DIRECTION_ANGLES[playerDirection];
 
   // Calculate angle to target
   const dx = targetX - playerX;
@@ -82,7 +85,7 @@ export interface MeleeTarget {
  *
  * @param playerX - Player X position (top-left)
  * @param playerY - Player Y position (top-left)
- * @param playerDirection - Player facing direction
+ * @param attackDirection - Player facing direction OR attack angle in radians
  * @param targets - Array of potential targets
  * @param tileSize - Tile size in pixels
  * @param attackRangeTiles - Attack range in tiles (default: 1.5)
@@ -92,7 +95,7 @@ export interface MeleeTarget {
 export function getTargetsInAttackCone<T extends MeleeTarget>(
   playerX: number,
   playerY: number,
-  playerDirection: Direction,
+  attackDirection: Direction | number,
   targets: T[],
   tileSize: number,
   attackRangeTiles: number = PLAYER_ATTACK_RANGE,
@@ -115,7 +118,7 @@ export function getTargetsInAttackCone<T extends MeleeTarget>(
     // Angle check
     return isInAttackCone(
       playerCenterX, playerCenterY,
-      playerDirection,
+      attackDirection,
       targetCenterX, targetCenterY,
       coneAngle
     );
@@ -154,4 +157,33 @@ export function canAttack(state: PlayerAttackState): boolean {
  */
 export function getAttackDamage(): number {
   return PLAYER_ATTACK_DAMAGE;
+}
+
+/**
+ * Convert an angle in radians to the closest cardinal Direction
+ *
+ * @param angle - Angle in radians (0 = right, PI/2 = down, PI = left, -PI/2 = up)
+ * @returns The closest cardinal Direction
+ */
+export function angleToDirection(angle: number): Direction {
+  // Normalize angle to 0 to 2*PI
+  let normalized = angle;
+  while (normalized < 0) normalized += 2 * Math.PI;
+  while (normalized >= 2 * Math.PI) normalized -= 2 * Math.PI;
+
+  // Divide into 4 quadrants (each 90 degrees / PI/2 radians)
+  // Right: -PI/4 to PI/4 (or 7PI/4 to 2PI and 0 to PI/4)
+  // Down: PI/4 to 3PI/4
+  // Left: 3PI/4 to 5PI/4
+  // Up: 5PI/4 to 7PI/4
+
+  if (normalized < Math.PI / 4 || normalized >= 7 * Math.PI / 4) {
+    return 'right';
+  } else if (normalized < 3 * Math.PI / 4) {
+    return 'down';
+  } else if (normalized < 5 * Math.PI / 4) {
+    return 'left';
+  } else {
+    return 'up';
+  }
 }

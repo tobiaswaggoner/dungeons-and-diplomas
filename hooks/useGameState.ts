@@ -112,18 +112,41 @@ export function useGameState({
   }, [onPlayerHpUpdate]);
 
   // Handle melee attack (called on mouse click)
-  const handleAttack = useCallback(() => {
+  // Takes mouse coordinates to calculate attack direction toward cursor
+  const handleAttack = useCallback((mouseX?: number, mouseY?: number) => {
     if (!dungeonManagerRef.current) return;
     if (inCombatRef.current) return;
     if (gamePausedRef.current) return;
 
     const engine = gameEngineRef.current;
     const manager = dungeonManagerRef.current;
+    const canvas = canvasRef.current;
+
+    let attackAngle: number | undefined;
+
+    // Calculate attack angle toward cursor if mouse position provided
+    if (mouseX !== undefined && mouseY !== undefined && canvas) {
+      const rect = canvas.getBoundingClientRect();
+
+      // Mouse position relative to canvas
+      const canvasMouseX = mouseX - rect.left;
+      const canvasMouseY = mouseY - rect.top;
+
+      // Player center position on screen (camera centers on player)
+      const playerScreenX = canvas.width / 2;
+      const playerScreenY = canvas.height / 2;
+
+      // Calculate angle from player to cursor
+      const dx = canvasMouseX - playerScreenX;
+      const dy = canvasMouseY - playerScreenY;
+      attackAngle = Math.atan2(dy, dx);
+    }
 
     const hits = engine.performAttack(
       playerRef.current,
       manager.trashmobs,
-      manager.tileSize
+      manager.tileSize,
+      attackAngle
     );
 
     // Remove dead trashmobs
@@ -301,7 +324,8 @@ export function useGameState({
       // Left mouse button only
       const mouseEvent = e as MouseEvent;
       if (mouseEvent.button === 0) {
-        handleAttack();
+        // Pass mouse coordinates to calculate attack direction toward cursor
+        handleAttack(mouseEvent.clientX, mouseEvent.clientY);
       }
     };
 
