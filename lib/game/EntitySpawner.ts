@@ -14,11 +14,13 @@ import {
   SHRINE_ENEMY_SPAWN_RADIUS,
   SHRINE_MIN_ENEMIES,
   SHRINE_MAX_ENEMIES,
-  SHRINE_MIN_PLAYER_DISTANCE
+  SHRINE_MIN_PLAYER_DISTANCE,
+  TRASHMOB_TYPE
 } from '../constants';
-import type { TileType, Room, Shrine } from '../constants';
+import type { TileType, Room, Shrine, TrashmobType } from '../constants';
 import type { Player } from '../enemy';
 import { Enemy } from '../enemy';
+import { Trashmob } from '../enemy/Trashmob';
 import { getSpawnRng } from '../dungeon/DungeonRNG';
 import {
   calculateSubjectWeights,
@@ -277,7 +279,7 @@ function calculateShrineSpawnPositions(
       // Check if position is valid
       const inRoom = x >= room.x && x < room.x + room.width &&
                      y >= room.y && y < room.y + room.height;
-      
+
       const dx = x - playerX;
       const dy = y - playerY;
       const distanceToPlayer = Math.sqrt(dx * dx + dy * dy);
@@ -342,7 +344,7 @@ function selectEnemySubjects(enemyCount: number, availableSubjects: string[]): s
     // Try to pick a subject not yet used
     let subject: string;
     let attempts = 0;
-    
+
     do {
       subject = availableSubjects[Math.floor(Math.random() * availableSubjects.length)];
       attempts++;
@@ -401,7 +403,7 @@ export async function spawnShrineEnemies(
 
   for (let i = 0; i < enemyCount; i++) {
     const level = determineShrineEnemyLevel(playerAverageElo, roomsExplored, totalRooms);
-    
+
     const enemy = new Enemy(
       positions[i].x * tileSize,
       positions[i].y * tileSize,
@@ -426,4 +428,82 @@ export async function spawnShrineEnemies(
   }
 
   return enemies;
+}
+
+/**
+ * Spawn trashmobs in rooms
+ * Trashmobs spawn in empty and combat rooms (not treasure rooms)
+ */
+export function spawnTrashmobs(
+  context: SpawnContext,
+  player: Player,
+  minPerRoom: number = 2,
+  maxPerRoom: number = 4
+): Trashmob[] {
+  const { dungeon, rooms, roomMap, dungeonWidth, dungeonHeight, tileSize } = context;
+  const trashmobs: Trashmob[] = [];
+  const rng = getSpawnRng();
+
+  // Get player's current room to avoid spawning there
+  const playerTileX = Math.floor((player.x + tileSize / 2) / tileSize);
+  const playerTileY = Math.floor((player.y + tileSize / 2) / tileSize);
+  const playerRoomId = roomMap[playerTileY]?.[playerTileX] ?? -1;
+
+  // Available trashmob types
+  const trashmobTypes: TrashmobType[] = [
+    TRASHMOB_TYPE.RAT,
+    TRASHMOB_TYPE.SLIME,
+    TRASHMOB_TYPE.BAT
+  ];
+
+  for (let roomIndex = 0; roomIndex < rooms.length; roomIndex++) {
+    const room = rooms[roomIndex];
+
+    // Skip player's starting room
+    if (roomIndex === playerRoomId) continue;
+
+    // Skip treasure rooms (only empty and combat rooms get trashmobs)
+    if (room.type === 'treasure') continue;
+
+    // Collect floor tiles in this room
+    const roomFloorTiles: { x: number; y: number }[] = [];
+    for (let y = room.y; y < room.y + room.height; y++) {
+      for (let x = room.x; x < room.x + room.width; x++) {
+        if (y >= 0 && y < dungeonHeight && x >= 0 && x < dungeonWidth) {
+          if (dungeon[y][x] === TILE.FLOOR && roomMap[y][x] === roomIndex) {
+            roomFloorTiles.push({ x, y });
+          }
+        }
+      }
+    }
+
+    if (roomFloorTiles.length === 0) continue;
+
+    // Determine number of trashmobs for this room
+    const numTrashmobs = minPerRoom + rng.nextIntMax(maxPerRoom - minPerRoom + 1);
+
+    // Spawn trashmobs
+    for (let i = 0; i < numTrashmobs && roomFloorTiles.length > 0; i++) {
+      // Pick random position
+      const posIndex = rng.nextIntMax(roomFloorTiles.length);
+      const pos = roomFloorTiles[posIndex];
+
+      // Remove position so we don't spawn multiple on same tile
+      roomFloorTiles.splice(posIndex, 1);
+
+      // Pick random trashmob type
+      const trashmobType = trashmobTypes[rng.nextIntMax(trashmobTypes.length)];
+
+      const trashmob = new Trashmob(
+        pos.x * tileSize,
+        pos.y * tileSize,
+        trashmobType,
+        roomIndex
+      );
+
+      trashmobs.push(trashmob);
+    }
+  }
+
+  return trashmobs;
 }
