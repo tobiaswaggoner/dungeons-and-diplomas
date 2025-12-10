@@ -43,6 +43,11 @@ export default function GameCanvas() {
   const [playerHp, setPlayerHp] = useState(PLAYER_MAX_HP);
   const [treasureBubbles, setTreasureBubbles] = useState<Array<{ id: number; x: number; y: number; xp: number }>>([]);
 
+  // Session stats for highscore tracking
+  const [sessionEnemiesDefeated, setSessionEnemiesDefeated] = useState(0);
+  const [sessionXpGained, setSessionXpGained] = useState(0);
+  const sessionStartTimeRef = useRef<number>(Date.now());
+
   // Inventory system
   const [equipment, setEquipment] = useState<Equipment>({
     helm: null,
@@ -217,7 +222,20 @@ export default function GameCanvas() {
 
   const handleXpGained = (amount: number) => {
     setUserXp(prev => prev + amount);
+    setSessionXpGained(prev => prev + amount);
   };
+
+  // Track enemy defeats for session stats
+  const handleEnemyDefeated = useCallback(() => {
+    setSessionEnemiesDefeated(prev => prev + 1);
+  }, []);
+
+  // Reset session stats when starting a new game
+  const resetSessionStats = useCallback(() => {
+    setSessionEnemiesDefeated(0);
+    setSessionXpGained(0);
+    sessionStartTimeRef.current = Date.now();
+  }, []);
 
   const handleTreasureCollected = (screenX: number, screenY: number, xpAmount: number) => {
     const bubbleId = Date.now() + Math.random();
@@ -328,12 +346,15 @@ export default function GameCanvas() {
     onPlayerHpUpdate: setPlayerHp,
     onGameRestart: () => {
       combo.resetCombo();
+      combo.resetMaxCombo();
       resetPlayerBuffs(playerRef.current);
       resetRegenTimer();
+      resetSessionStats();
       gameState.generateNewDungeon();
     },
     onXpGained: handleXpGained,
     onItemDropped: handleItemDropped,
+    onEnemyDefeated: handleEnemyDefeated,
     onEnemyDefeatedFlawless: combo.incrementCombo,
     onComboBreak: combo.resetCombo,
     onShrineEnemyDefeated: (enemyId, shrineId) => {
@@ -522,8 +543,10 @@ export default function GameCanvas() {
   const handlePauseMenuRestart = () => {
     setShowPauseMenu(false);
     combo.resetCombo();
+    combo.resetMaxCombo();
     resetPlayerBuffs(playerRef.current);
     resetRegenTimer();
+    resetSessionStats();
     gameState.generateNewDungeon();
     gameState.gamePausedRef.current = false;
   };
@@ -544,11 +567,13 @@ export default function GameCanvas() {
     setShowPauseMenu(true);
   };
 
-  // Handle game restart - resets combo, buffs, and generates new dungeon
+  // Handle game restart - resets combo, buffs, session stats, and generates new dungeon
   const handleRestart = () => {
     combo.resetCombo();
+    combo.resetMaxCombo();
     resetPlayerBuffs(playerRef.current);
     resetRegenTimer();
+    resetSessionStats();
     gameState.generateNewDungeon();
   };
 
@@ -758,7 +783,17 @@ export default function GameCanvas() {
 
         {/* Defeat Overlay */}
         {combat.showDefeat && (
-          <DefeatOverlay onRestart={combat.handleDefeatRestart} />
+          <DefeatOverlay
+            onRestart={combat.handleDefeatRestart}
+            userId={userId}
+            stats={{
+              enemiesDefeated: sessionEnemiesDefeated,
+              roomsExplored: gameState.dungeonManagerRef.current?.rooms.filter(r => r.visible).length ?? 0,
+              xpGained: sessionXpGained,
+              maxCombo: combo.maxCombo,
+              playTimeSeconds: Math.floor((Date.now() - sessionStartTimeRef.current) / 1000)
+            }}
+          />
         )}
 
         {/* Treasure XP Bubbles */}

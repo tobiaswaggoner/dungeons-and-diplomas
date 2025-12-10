@@ -67,6 +67,30 @@ export function initializeDatabase(database: Database.Database, options: InitOpt
     )
   `);
 
+  // Create highscores table
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS highscores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      score INTEGER NOT NULL,
+      enemies_defeated INTEGER DEFAULT 0,
+      rooms_explored INTEGER DEFAULT 0,
+      xp_gained INTEGER DEFAULT 0,
+      max_combo INTEGER DEFAULT 0,
+      play_time_seconds INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  // Create index for highscores
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_highscores_score ON highscores(score DESC)
+  `);
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_highscores_user ON highscores(user_id)
+  `);
+
   // Create editor_levels table
   database.exec(`
     CREATE TABLE IF NOT EXISTS editor_levels (

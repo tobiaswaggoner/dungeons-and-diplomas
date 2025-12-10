@@ -24,6 +24,8 @@ interface UseCombatProps {
   onGameRestart: () => void;
   onXpGained?: (amount: number) => void;
   onItemDropped?: (item: DroppedItem) => void;
+  /** Called when any enemy is defeated - used for session stats tracking */
+  onEnemyDefeated?: () => void;
   /** Called when an enemy is defeated flawlessly (no wrong answers) - used for combo tracking */
   onEnemyDefeatedFlawless?: () => void;
   /** Called when combo should be reset (wrong answer breaks combo) */
@@ -47,6 +49,7 @@ export function useCombat({
   onGameRestart,
   onXpGained,
   onItemDropped,
+  onEnemyDefeated,
   onEnemyDefeatedFlawless,
   onComboBreak,
   onShrineEnemyDefeated,
@@ -106,6 +109,11 @@ export function useCombat({
           onXpGained(xpReward);
         }
 
+        // Track enemy defeat for session stats
+        if (onEnemyDefeated) {
+          onEnemyDefeated();
+        }
+
         // Generate loot drop - bosses (level 8+) always drop uncommon+ items
         let droppedItem: DroppedItem | null;
         if (isBoss(enemy.level)) {
@@ -147,7 +155,7 @@ export function useCombat({
     } else {
       dispatch({ type: 'END_COMBAT' });
     }
-  }, [state.enemy, state.playerElo, userId, onXpGained, onItemDropped, onEnemyDefeatedFlawless, onShrineEnemyDefeated, tileSize, stopTimer, playerRef, equipmentBonuses.xpBonus]);
+  }, [state.enemy, state.playerElo, userId, onXpGained, onEnemyDefeated, onItemDropped, onEnemyDefeatedFlawless, onShrineEnemyDefeated, tileSize, stopTimer, playerRef, equipmentBonuses.xpBonus]);
 
   const askQuestion = useCallback(async () => {
     const enemy = state.enemy;

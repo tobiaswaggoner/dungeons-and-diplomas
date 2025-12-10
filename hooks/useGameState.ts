@@ -177,14 +177,17 @@ export function useGameState({
       );
     }
 
-    minimapRendererRef.current.render(
-      minimap,
-      playerRef.current,
-      manager.dungeon,
-      manager.roomMap,
-      manager.rooms,
-      manager.tileSize
-    );
+    minimapRendererRef.current.render({
+      canvas: minimap,
+      player: playerRef.current,
+      dungeon: manager.dungeon,
+      roomMap: manager.roomMap,
+      rooms: manager.rooms,
+      tileSize: manager.tileSize,
+      enemies: manager.enemies,
+      shrines: manager.shrines,
+      treasures: manager.treasures
+    });
   };
 
   const gameLoop = (timestamp: number) => {

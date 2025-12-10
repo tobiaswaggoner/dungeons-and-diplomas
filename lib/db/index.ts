@@ -55,3 +55,15 @@ export {
   type SubjectStats,
   type UserStats
 } from './stats';
+
+// Highscores
+export {
+  saveHighscore,
+  getTopHighscores,
+  getUserHighscores,
+  getScoreRank,
+  isPersonalBest,
+  calculateScore,
+  type Highscore,
+  type HighscoreEntry
+} from './highscores';

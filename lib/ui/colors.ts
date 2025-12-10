@@ -56,6 +56,11 @@ export const RENDER_COLORS = {
     wall: '#444444',
     door: '#4CAF50',
     player: '#00FFFF',
+    // Entity markers
+    enemy: '#FF0000',
+    shrine: '#FFD700',
+    shrineActive: '#FF6600',
+    treasureItem: '#FFFF00',
   },
 
   // Editor colors

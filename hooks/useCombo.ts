@@ -79,6 +79,7 @@ interface UseComboOptions {
  */
 export function useCombo({ inCombat = false }: UseComboOptions = {}) {
   const [count, setCount] = useState(0);
+  const [maxCombo, setMaxCombo] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [timerDuration, setTimerDuration] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
@@ -145,6 +146,8 @@ export function useCombo({ inCombat = false }: UseComboOptions = {}) {
   const incrementCombo = useCallback(() => {
     setCount(prev => {
       const newCount = prev + 1;
+      // Track max combo achieved
+      setMaxCombo(max => Math.max(max, newCount));
       // Start or restart timer when reaching 3+
       startComboTimer(newCount);
       return newCount;
@@ -153,6 +156,7 @@ export function useCombo({ inCombat = false }: UseComboOptions = {}) {
 
   /**
    * Reset combo to 0 (on player death, new dungeon, wrong answer, or timer expires)
+   * Does NOT reset maxCombo - that's preserved for highscore tracking
    */
   const resetCombo = useCallback(() => {
     clearComboTimer();
@@ -161,6 +165,13 @@ export function useCombo({ inCombat = false }: UseComboOptions = {}) {
     setTimerDuration(0);
     setIsTimerActive(false);
   }, [clearComboTimer]);
+
+  /**
+   * Reset max combo (called when starting a completely new game session)
+   */
+  const resetMaxCombo = useCallback(() => {
+    setMaxCombo(0);
+  }, []);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -181,7 +192,9 @@ export function useCombo({ inCombat = false }: UseComboOptions = {}) {
 
   return {
     ...comboState,
+    maxCombo,
     incrementCombo,
-    resetCombo
+    resetCombo,
+    resetMaxCombo
   };
 }
