@@ -20,6 +20,7 @@ import { getEntityTilePosition } from '../physics/TileCoordinates';
 import { DirectionCalculator } from '../movement/DirectionCalculator';
 import { getTargetsInAttackCone, angleToDirection, type PlayerAttackState, createAttackState, canAttack } from '../combat/MeleeAttack';
 import type { UpdatePlayerContext, UpdateEnemiesContext, UpdateTrashmobsContext } from '../types/game';
+import { getEffectsManager } from '../effects';
 
 export class GameEngine {
   private lastSpacePressed: boolean = false;
@@ -148,6 +149,10 @@ export class GameEngine {
       const roomId = roomMap[playerTileY][playerTileX];
       if (roomId >= 0 && rooms[roomId] && !rooms[roomId].visible) {
         rooms[roomId].visible = true;
+
+        // Trigger room reveal particle effect only in the newly revealed room
+        const room = rooms[roomId];
+        getEffectsManager().onRoomRevealed(room.x, room.y, room.width, room.height, tileSize);
       }
     }
   }

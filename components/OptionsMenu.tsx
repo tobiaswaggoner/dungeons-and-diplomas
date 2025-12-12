@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import GameOverlay from './GameOverlay';
 import { COLORS } from '@/lib/ui/colors';
 import type { AudioSettings } from '@/hooks/useAudioSettings';
+import { getEffectsManager, type ParticleQuality, type EffectSettings } from '@/lib/effects';
 
 interface OptionsMenuProps {
   settings: AudioSettings;
@@ -19,6 +20,13 @@ interface VolumeSliderProps {
   onChange: (value: number) => void;
   icon: string;
 }
+
+const PARTICLE_QUALITY_OPTIONS: { value: ParticleQuality; label: string }[] = [
+  { value: 'off', label: 'Aus' },
+  { value: 'low', label: 'Niedrig' },
+  { value: 'medium', label: 'Mittel' },
+  { value: 'high', label: 'Hoch' },
+];
 
 function VolumeSlider({ label, value, onChange, icon }: VolumeSliderProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -145,6 +153,140 @@ function VolumeSlider({ label, value, onChange, icon }: VolumeSliderProps) {
   );
 }
 
+interface ToggleSwitchProps {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  icon: string;
+}
+
+function ToggleSwitch({ label, value, onChange, icon }: ToggleSwitchProps) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '16px',
+      width: '450px',
+    }}>
+      {/* Icon */}
+      <div style={{
+        fontSize: '24px',
+        width: '32px',
+        textAlign: 'center',
+        userSelect: 'none',
+      }}>
+        {icon}
+      </div>
+
+      {/* Label */}
+      <div style={{
+        flex: 1,
+        fontSize: '18px',
+        fontWeight: 600,
+        color: COLORS.text.primary,
+        userSelect: 'none',
+      }}>
+        {label}
+      </div>
+
+      {/* Toggle */}
+      <div
+        onClick={() => onChange(!value)}
+        style={{
+          width: '56px',
+          height: '28px',
+          borderRadius: '14px',
+          backgroundColor: value ? COLORS.gold : '#333',
+          border: `2px solid ${value ? COLORS.gold : '#555'}`,
+          position: 'relative',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+        }}
+      >
+        <div
+          style={{
+            width: '20px',
+            height: '20px',
+            borderRadius: '50%',
+            backgroundColor: '#fff',
+            position: 'absolute',
+            top: '2px',
+            left: value ? '30px' : '2px',
+            transition: 'left 0.2s',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface QualitySelectorProps {
+  label: string;
+  value: ParticleQuality;
+  onChange: (value: ParticleQuality) => void;
+  icon: string;
+}
+
+function QualitySelector({ label, value, onChange, icon }: QualitySelectorProps) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '16px',
+      width: '450px',
+    }}>
+      {/* Icon */}
+      <div style={{
+        fontSize: '24px',
+        width: '32px',
+        textAlign: 'center',
+        userSelect: 'none',
+      }}>
+        {icon}
+      </div>
+
+      {/* Label */}
+      <div style={{
+        width: '80px',
+        fontSize: '18px',
+        fontWeight: 600,
+        color: COLORS.text.primary,
+        userSelect: 'none',
+      }}>
+        {label}
+      </div>
+
+      {/* Quality Buttons */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+      }}>
+        {PARTICLE_QUALITY_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            style={{
+              padding: '6px 14px',
+              fontSize: '14px',
+              fontWeight: 600,
+              color: value === option.value ? '#000' : COLORS.text.secondary,
+              backgroundColor: value === option.value ? COLORS.gold : '#333',
+              border: `2px solid ${value === option.value ? COLORS.gold : '#555'}`,
+              borderRadius: '6px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              userSelect: 'none',
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function OptionsMenu({
   settings,
   onMasterVolumeChange,
@@ -153,6 +295,24 @@ export default function OptionsMenu({
   onBack,
 }: OptionsMenuProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [effectSettings, setEffectSettings] = useState<EffectSettings>(() => {
+    return getEffectsManager().getSettings();
+  });
+
+  const handleParticleQualityChange = (quality: ParticleQuality) => {
+    getEffectsManager().setParticleQuality(quality);
+    setEffectSettings(prev => ({ ...prev, particleQuality: quality }));
+  };
+
+  const handleScreenShakeChange = (enabled: boolean) => {
+    getEffectsManager().setScreenShakeEnabled(enabled);
+    setEffectSettings(prev => ({ ...prev, screenShakeEnabled: enabled }));
+  };
+
+  const handleTransitionsChange = (enabled: boolean) => {
+    getEffectsManager().setTransitionsEnabled(enabled);
+    setEffectSettings(prev => ({ ...prev, transitionsEnabled: enabled }));
+  };
 
   return (
     <GameOverlay
@@ -172,7 +332,7 @@ export default function OptionsMenu({
           fontWeight: 900,
           color: COLORS.gold,
           textShadow: '0 0 20px rgba(255, 215, 0, 0.5), 4px 4px 8px rgba(0, 0, 0, 0.9)',
-          marginBottom: '50px',
+          marginBottom: '40px',
           userSelect: 'none',
           letterSpacing: '6px',
         }}
@@ -186,16 +346,16 @@ export default function OptionsMenu({
           backgroundColor: 'rgba(30, 30, 30, 0.8)',
           border: `2px solid ${COLORS.border.gold}`,
           borderRadius: '12px',
-          padding: '30px 40px',
-          marginBottom: '40px',
+          padding: '24px 40px',
+          marginBottom: '20px',
         }}
       >
         <div
           style={{
-            fontSize: '24px',
+            fontSize: '22px',
             fontWeight: 700,
             color: COLORS.text.primary,
-            marginBottom: '30px',
+            marginBottom: '20px',
             textAlign: 'center',
             userSelect: 'none',
           }}
@@ -206,7 +366,7 @@ export default function OptionsMenu({
         <div style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: '25px',
+          gap: '20px',
         }}>
           <VolumeSlider
             label="Gesamt"
@@ -225,6 +385,55 @@ export default function OptionsMenu({
             icon="👣"
             value={settings.sfxVolume}
             onChange={onSfxVolumeChange}
+          />
+        </div>
+      </div>
+
+      {/* Visual Effects Section */}
+      <div
+        style={{
+          backgroundColor: 'rgba(30, 30, 30, 0.8)',
+          border: `2px solid ${COLORS.border.gold}`,
+          borderRadius: '12px',
+          padding: '24px 40px',
+          marginBottom: '30px',
+        }}
+      >
+        <div
+          style={{
+            fontSize: '22px',
+            fontWeight: 700,
+            color: COLORS.text.primary,
+            marginBottom: '20px',
+            textAlign: 'center',
+            userSelect: 'none',
+          }}
+        >
+          Visuelle Effekte
+        </div>
+
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+        }}>
+          <QualitySelector
+            label="Partikel"
+            icon="✨"
+            value={effectSettings.particleQuality}
+            onChange={handleParticleQualityChange}
+          />
+          <ToggleSwitch
+            label="Screen-Shake"
+            icon="📳"
+            value={effectSettings.screenShakeEnabled}
+            onChange={handleScreenShakeChange}
+          />
+          <ToggleSwitch
+            label="Raum-Übergänge"
+            icon="🚪"
+            value={effectSettings.transitionsEnabled}
+            onChange={handleTransitionsChange}
           />
         </div>
       </div>

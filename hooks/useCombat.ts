@@ -14,6 +14,7 @@ import { type Clock, defaultClock } from '@/lib/time';
 import { logHookError } from '@/lib/hooks';
 import { generateEnemyLoot, generateBossLoot, isBoss, type DroppedItem, type EquipmentBonuses, DEFAULT_BONUSES } from '@/lib/items';
 import { applyDamageToPlayer, getTimeBonus, getDamageBoost, getDamageReduction } from '@/lib/buff';
+import { getEffectsManager } from '@/lib/effects';
 
 interface UseCombatProps {
   questionDatabase: QuestionDatabase | null;
@@ -256,8 +257,20 @@ export function useCombat({
       // Use buff system for damage with shield absorption
       applyDamageToPlayer(playerRef.current, result.damage);
       onPlayerHpUpdate(playerRef.current.hp);
+
+      // Trigger player damage effects (red particles + screen shake)
+      const effectsManager = getEffectsManager();
+      const playerCenterX = playerRef.current.x + playerRef.current.width / 2;
+      const playerCenterY = playerRef.current.y + playerRef.current.height / 2;
+      effectsManager.onPlayerDamage(playerCenterX, playerCenterY, result.damage);
     } else {
       enemy.takeDamage(result.damage);
+
+      // Trigger enemy hit effects (sparks)
+      const effectsManager = getEffectsManager();
+      const enemyCenterX = enemy.x * tileSize + tileSize / 2;
+      const enemyCenterY = enemy.y * tileSize + tileSize / 2;
+      effectsManager.onEnemyHit(enemyCenterX, enemyCenterY);
     }
 
     dispatch({

@@ -1,6 +1,6 @@
 'use client';
 
-import { COLORS } from '@/lib/ui/colors';
+import { MEDIEVAL_COLORS, MEDIEVAL_STYLES, getHpGradient, getHpGlowColor } from '@/lib/ui/medieval-styles';
 
 interface HpBarProps {
   currentHp: number;
@@ -8,18 +8,12 @@ interface HpBarProps {
 }
 
 /**
- * HP Bar component showing player health
+ * HP Bar component showing player health in medieval metal frame style
  */
 export function HpBar({ currentHp, maxHp }: HpBarProps) {
   const hpPercent = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
-
-  // Color based on HP percentage
-  let barColor: string = COLORS.success; // Green
-  if (hpPercent <= 25) {
-    barColor = '#FF4444'; // Red
-  } else if (hpPercent <= 50) {
-    barColor = '#FFAA00'; // Orange
-  }
+  const gradient = getHpGradient(hpPercent);
+  const glowColor = getHpGlowColor(hpPercent);
 
   return (
     <div style={{ marginBottom: '12px' }}>
@@ -31,64 +25,108 @@ export function HpBar({ currentHp, maxHp }: HpBarProps) {
         marginBottom: '4px'
       }}>
         <span style={{
-          color: '#FF6666',
-          fontSize: '14px',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '1px'
+          ...MEDIEVAL_STYLES.barLabel,
+          color: MEDIEVAL_COLORS.text.hp,
+          fontSize: '12px',
         }}>
-          ❤️ HP
+          HP
         </span>
         <span style={{
-          color: '#FFF',
-          fontSize: '14px',
-          fontWeight: 700
+          ...MEDIEVAL_STYLES.barValue,
+          fontSize: '12px',
         }}>
           {currentHp} / {maxHp}
         </span>
       </div>
 
-      {/* HP Bar Background */}
+      {/* Metal Frame HP Bar */}
       <div style={{
         width: '100%',
-        height: '16px',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        borderRadius: '8px',
-        border: '2px solid #333',
+        height: '20px',
+        ...MEDIEVAL_STYLES.barFrameSmall,
+        position: 'relative',
         overflow: 'hidden',
-        position: 'relative'
       }}>
-        {/* HP Bar Fill */}
+        {/* Inner shadow for depth */}
         <div style={{
-          width: `${hpPercent}%`,
-          height: '100%',
-          backgroundColor: barColor,
-          borderRadius: '6px',
-          transition: 'width 0.3s ease, background-color 0.3s ease',
-          boxShadow: `0 0 10px ${barColor}40`
+          ...MEDIEVAL_STYLES.innerShadow,
+          height: '2px',
         }} />
 
-        {/* Damage flash effect when low HP */}
+        {/* Fill bar with gradient */}
+        <div style={{
+          height: '100%',
+          background: gradient,
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: `${hpPercent}%`,
+          transition: 'width 0.3s ease-out, background 0.3s ease',
+          boxShadow: `inset 0 1px 2px rgba(255, 255, 255, 0.3), 0 0 8px ${glowColor}80`
+        }} />
+
+        {/* Shine effect on fill */}
+        <div style={{
+          ...MEDIEVAL_STYLES.shineEffect,
+          width: `${hpPercent}%`,
+          height: '35%',
+        }} />
+
+        {/* Metal rivets */}
+        <div style={{
+          position: 'absolute',
+          top: '2px',
+          left: '2px',
+          ...MEDIEVAL_STYLES.rivet,
+          width: '3px',
+          height: '3px',
+        }} />
+        <div style={{
+          position: 'absolute',
+          top: '2px',
+          right: '2px',
+          ...MEDIEVAL_STYLES.rivet,
+          width: '3px',
+          height: '3px',
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '2px',
+          left: '2px',
+          ...MEDIEVAL_STYLES.rivet,
+          width: '3px',
+          height: '3px',
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '2px',
+          right: '2px',
+          ...MEDIEVAL_STYLES.rivet,
+          width: '3px',
+          height: '3px',
+        }} />
+
+        {/* Low HP pulse effect */}
         {hpPercent <= 25 && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(255, 0, 0, 0.3)',
-            animation: 'pulse 1s infinite'
-          }} />
+          <>
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(255, 0, 0, 0.2)',
+              animation: 'hpPulse 1s infinite'
+            }} />
+            <style jsx>{`
+              @keyframes hpPulse {
+                0%, 100% { opacity: 0.2; }
+                50% { opacity: 0.5; }
+              }
+            `}</style>
+          </>
         )}
       </div>
-
-      {/* CSS for pulse animation */}
-      <style jsx>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 0.6; }
-        }
-      `}</style>
     </div>
   );
 }

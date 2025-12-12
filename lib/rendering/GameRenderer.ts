@@ -8,6 +8,7 @@ import { VisibilityCalculator } from '../visibility';
 import { getTileRenderer } from './TileRenderer';
 import { getContext2D } from './canvasUtils';
 import { RENDER_COLORS } from '../ui/colors';
+import { getEffectsManager } from '../effects';
 
 /**
  * Main game renderer that orchestrates all rendering passes.
@@ -93,6 +94,9 @@ export class GameRenderer {
     }
   }
 
+  // Debug counter for trashmob rendering
+  private trashmobRenderDebugCounter = 0;
+
   /**
    * Render all trashmobs visible in player's rooms
    */
@@ -103,6 +107,14 @@ export class GameRenderer {
     tileSize: number,
     playerRoomIds: Set<number>
   ): void {
+    // Debug log every 120 frames
+    this.trashmobRenderDebugCounter++;
+    if (this.trashmobRenderDebugCounter >= 120) {
+      this.trashmobRenderDebugCounter = 0;
+      const visibleCount = trashmobs.filter(t => t.alive && rooms[t.roomId]?.visible).length;
+      console.log(`[GameRenderer] Trashmobs total: ${trashmobs.length}, visible: ${visibleCount}`);
+    }
+
     for (const trashmob of trashmobs) {
       if (!trashmob.alive) continue;
 
@@ -217,8 +229,12 @@ export class GameRenderer {
     const dungeonWidth = renderMap.width;
     const dungeonHeight = renderMap.height;
 
-    const camX = player.x + tileSize / 2 - canvas.width / 2;
-    const camY = player.y + tileSize / 2 - canvas.height / 2;
+    // Get screen shake offset
+    const effectsManager = getEffectsManager();
+    const shakeOffset = effectsManager.getCameraOffset();
+
+    const camX = player.x + tileSize / 2 - canvas.width / 2 + shakeOffset.x;
+    const camY = player.y + tileSize / 2 - canvas.height / 2 + shakeOffset.y;
 
     ctx.save();
     ctx.translate(-Math.floor(camX), -Math.floor(camY));
@@ -255,6 +271,12 @@ export class GameRenderer {
 
     // Render player
     this.renderPlayer(ctx, playerSprite, player, tileSize);
+
+    // Render particles (after game objects, before UI)
+    effectsManager.renderParticles(ctx, 0, 0); // Already translated by camera
+
+    // Render room transition overlay in world space (only on room area)
+    effectsManager.renderTransitionInWorldSpace(ctx);
 
     ctx.restore();
   }

@@ -1,83 +1,113 @@
 'use client';
 
+import { useState } from 'react';
+import { MEDIEVAL_COLORS, MEDIEVAL_STYLES } from '@/lib/ui/medieval-styles';
+
 interface ActionButtonsProps {
   onRestart: () => void;
   onSkills: () => void;
   onLogout: () => void;
+  onSettings?: () => void;
 }
 
 interface ActionButtonProps {
   onClick: () => void;
   title: string;
   icon: string;
-  color: string;
-  rgbValues: string;
+  accentColor: string;
 }
 
 /**
- * Single action button with hover effect
+ * Single action button with medieval metal style
  */
-function ActionButton({ onClick, title, icon, color, rgbValues }: ActionButtonProps) {
+function ActionButton({ onClick, title, icon, accentColor }: ActionButtonProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
   return (
     <button
       onClick={onClick}
       title={title}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
         flex: 1,
-        padding: '5px 8px',
-        fontSize: '11px',
-        fontWeight: '600',
-        backgroundColor: `rgba(${rgbValues}, 0.3)`,
-        color: color,
-        border: `1px solid rgba(${rgbValues}, 0.5)`,
-        borderRadius: '4px',
-        cursor: 'pointer',
-        transition: 'all 0.2s'
-      }}
-      onMouseOver={(e) => {
-        e.currentTarget.style.backgroundColor = `rgba(${rgbValues}, 0.5)`;
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.backgroundColor = `rgba(${rgbValues}, 0.3)`;
+        padding: '6px 8px',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        color: isHovered ? accentColor : MEDIEVAL_COLORS.text.secondary,
+        ...MEDIEVAL_STYLES.button,
+        borderColor: isHovered ? accentColor : MEDIEVAL_COLORS.frame.border,
+        boxShadow: isHovered
+          ? `inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 0 8px ${accentColor}40`
+          : MEDIEVAL_STYLES.button.boxShadow,
+        position: 'relative',
       }}
     >
+      {/* Small rivets */}
+      <div style={{
+        position: 'absolute',
+        top: '2px',
+        left: '2px',
+        ...MEDIEVAL_STYLES.rivet,
+        width: '2px',
+        height: '2px',
+      }} />
+      <div style={{
+        position: 'absolute',
+        top: '2px',
+        right: '2px',
+        ...MEDIEVAL_STYLES.rivet,
+        width: '2px',
+        height: '2px',
+      }} />
       {icon}
     </button>
   );
 }
 
 /**
- * Action buttons row (Restart, Skills, Logout)
+ * Action buttons row in medieval metal frame style
  */
-export function ActionButtons({ onRestart, onSkills, onLogout }: ActionButtonsProps) {
+export function ActionButtons({ onRestart, onSkills, onLogout, onSettings }: ActionButtonsProps) {
   return (
-    <div style={{
-      display: 'flex',
-      gap: '4px',
-      paddingTop: '8px',
-      borderTop: '1px solid rgba(76, 175, 80, 0.2)'
-    }}>
-      <ActionButton
-        onClick={onRestart}
-        title="Restart"
-        icon="🔄"
-        color="#4CAF50"
-        rgbValues="76, 175, 80"
-      />
-      <ActionButton
-        onClick={onSkills}
-        title="Skills"
-        icon="📊"
-        color="#2196F3"
-        rgbValues="33, 150, 243"
-      />
-      <ActionButton
-        onClick={onLogout}
-        title="Logout"
-        icon="🚪"
-        color="#f44336"
-        rgbValues="244, 67, 54"
-      />
+    <div style={{ marginTop: '4px' }}>
+      {/* Divider */}
+      <div style={{
+        ...MEDIEVAL_STYLES.divider,
+        marginBottom: '8px',
+      }} />
+
+      <div style={{
+        display: 'flex',
+        gap: '6px',
+      }}>
+        <ActionButton
+          onClick={onRestart}
+          title="Restart"
+          icon="R"
+          accentColor={MEDIEVAL_COLORS.mastery.master}
+        />
+        <ActionButton
+          onClick={onSkills}
+          title="Skills"
+          icon="S"
+          accentColor={MEDIEVAL_COLORS.mastery.advanced}
+        />
+        {onSettings && (
+          <ActionButton
+            onClick={onSettings}
+            title="Einstellungen"
+            icon="⚙"
+            accentColor={MEDIEVAL_COLORS.text.primary}
+          />
+        )}
+        <ActionButton
+          onClick={onLogout}
+          title="Logout"
+          icon="X"
+          accentColor="#f44336"
+        />
+      </div>
     </div>
   );
 }

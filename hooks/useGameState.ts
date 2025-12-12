@@ -12,6 +12,7 @@ import { useKeyboardInput } from './useKeyboardInput';
 import { useTreasureCollection } from './useTreasureCollection';
 import { useFootsteps } from './useFootsteps';
 import { updateShieldRegen, updateHpRegen } from '@/lib/buff';
+import { getEffectsManager } from '@/lib/effects';
 
 interface UseGameStateProps {
   questionDatabase: QuestionDatabase | null;
@@ -114,6 +115,12 @@ export function useGameState({
     playerRef.current.hp -= damage;
     if (playerRef.current.hp < 0) playerRef.current.hp = 0;
     onPlayerHpUpdate(playerRef.current.hp);
+
+    // Trigger damage effects (red particles + screen shake)
+    const effectsManager = getEffectsManager();
+    const playerCenterX = playerRef.current.x + playerRef.current.width / 2;
+    const playerCenterY = playerRef.current.y + playerRef.current.height / 2;
+    effectsManager.onPlayerDamage(playerCenterX, playerCenterY, damage);
   }, [onPlayerHpUpdate]);
 
   // Handle melee attack (called on mouse click)
@@ -154,8 +161,14 @@ export function useGameState({
       attackAngle
     );
 
-    // Remove dead trashmobs
+    // Trigger spark effects for each hit trashmob
     if (hits.length > 0) {
+      const effectsManager = getEffectsManager();
+      for (const trashmob of hits) {
+        const trashmobCenterX = trashmob.x * manager.tileSize + manager.tileSize / 2;
+        const trashmobCenterY = trashmob.y * manager.tileSize + manager.tileSize / 2;
+        effectsManager.onTrashmobHit(trashmobCenterX, trashmobCenterY);
+      }
       manager.trashmobs = manager.trashmobs.filter(t => t.alive);
     }
   }, []);
@@ -166,6 +179,10 @@ export function useGameState({
 
     const engine = gameEngineRef.current;
     const manager = dungeonManagerRef.current;
+    const effectsManager = getEffectsManager();
+
+    // Update effects system
+    effectsManager.update(dt);
 
     // Update attack state (cooldown timer)
     engine.updateAttackState(dt);
@@ -225,6 +242,25 @@ export function useGameState({
     // Update buff regeneration (shield + HP)
     updateShieldRegen(playerRef.current, dt);
     updateHpRegen(playerRef.current, dt);
+
+    // Spawn dust particles when player is moving
+    if (playerRef.current.isMoving && !inCombatRef.current) {
+      // Use tileSize instead of player.width/height (which are 0)
+      const playerFeetX = playerRef.current.x + manager.tileSize / 2;
+      const playerFeetY = playerRef.current.y + manager.tileSize;
+      effectsManager.onPlayerWalk(playerFeetX, playerFeetY, true);
+    }
+
+    // Check for room transitions
+    const playerTileX = Math.floor((playerRef.current.x + playerRef.current.width / 2) / manager.tileSize);
+    const playerTileY = Math.floor((playerRef.current.y + playerRef.current.height / 2) / manager.tileSize);
+    if (playerTileX >= 0 && playerTileX < manager.roomMap[0]?.length &&
+        playerTileY >= 0 && playerTileY < manager.roomMap.length) {
+      const currentRoomId = manager.roomMap[playerTileY][playerTileX];
+      if (currentRoomId >= 0) {
+        effectsManager.checkRoomTransition(currentRoomId);
+      }
+    }
   };
 
   const render = () => {

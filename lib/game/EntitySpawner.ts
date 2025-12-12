@@ -456,6 +456,8 @@ export function spawnTrashmobs(
     TRASHMOB_TYPE.BAT
   ];
 
+  console.log(`[EntitySpawner] Starting trashmob spawn. Total rooms: ${rooms.length}, playerRoomId: ${playerRoomId}`);
+
   for (let roomIndex = 0; roomIndex < rooms.length; roomIndex++) {
     const room = rooms[roomIndex];
 
@@ -464,6 +466,9 @@ export function spawnTrashmobs(
 
     // Skip treasure rooms (only empty and combat rooms get trashmobs)
     if (room.type === 'treasure') continue;
+
+    // Skip shrine rooms
+    if (room.type === 'shrine') continue;
 
     // Collect floor tiles in this room
     const roomFloorTiles: { x: number; y: number }[] = [];
@@ -505,5 +510,6 @@ export function spawnTrashmobs(
     }
   }
 
+  console.log(`[EntitySpawner] Spawned ${trashmobs.length} trashmobs`);
   return trashmobs;
 }

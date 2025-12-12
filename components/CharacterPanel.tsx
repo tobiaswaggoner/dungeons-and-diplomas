@@ -5,6 +5,7 @@ import { HpBar } from './character/HpBar';
 import { XpProgressBar } from './character/XpProgressBar';
 import { MasteryCircles } from './character/MasteryCircles';
 import { ActionButtons } from './character/ActionButtons';
+import { MEDIEVAL_COLORS, MEDIEVAL_STYLES } from '@/lib/ui/medieval-styles';
 import type { SubjectScore } from './character/MasteryCircles';
 
 interface CharacterPanelProps {
@@ -19,10 +20,11 @@ interface CharacterPanelProps {
   onLogout: () => void;
   onRestart: () => void;
   onSkills: () => void;
+  onSettings?: () => void;
 }
 
 /**
- * Character panel displaying player info, XP, mastery, and actions
+ * Character panel in medieval metal frame style
  */
 export default function CharacterPanel({
   username,
@@ -35,7 +37,8 @@ export default function CharacterPanel({
   maxHp,
   onLogout,
   onRestart,
-  onSkills
+  onSkills,
+  onSettings
 }: CharacterPanelProps) {
   return (
     <div style={{
@@ -43,13 +46,56 @@ export default function CharacterPanel({
       top: '10px',
       left: '10px',
       zIndex: 100,
-      backgroundColor: 'rgba(0, 0, 0, 0.85)',
-      border: '2px solid #4CAF50',
-      borderRadius: '12px',
-      padding: '15px',
-      minWidth: '280px',
-      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.7)'
+      ...MEDIEVAL_STYLES.panelFrame,
+      padding: '12px',
+      minWidth: '260px',
     }}>
+      {/* Corner rivets for the main panel */}
+      <div style={{
+        position: 'absolute',
+        top: '6px',
+        left: '6px',
+        ...MEDIEVAL_STYLES.rivet,
+        width: '6px',
+        height: '6px',
+      }} />
+      <div style={{
+        position: 'absolute',
+        top: '6px',
+        right: '6px',
+        ...MEDIEVAL_STYLES.rivet,
+        width: '6px',
+        height: '6px',
+      }} />
+      <div style={{
+        position: 'absolute',
+        bottom: '6px',
+        left: '6px',
+        ...MEDIEVAL_STYLES.rivet,
+        width: '6px',
+        height: '6px',
+      }} />
+      <div style={{
+        position: 'absolute',
+        bottom: '6px',
+        right: '6px',
+        ...MEDIEVAL_STYLES.rivet,
+        width: '6px',
+        height: '6px',
+      }} />
+
+      {/* Inner metal border effect */}
+      <div style={{
+        position: 'absolute',
+        top: '3px',
+        left: '3px',
+        right: '3px',
+        bottom: '3px',
+        border: `1px solid ${MEDIEVAL_COLORS.frame.innerBorder}`,
+        borderRadius: '2px',
+        pointerEvents: 'none',
+      }} />
+
       <CharacterHeader username={username} level={level} />
 
       <HpBar currentHp={currentHp} maxHp={maxHp} />
@@ -66,6 +112,7 @@ export default function CharacterPanel({
         onRestart={onRestart}
         onSkills={onSkills}
         onLogout={onLogout}
+        onSettings={onSettings}
       />
     </div>
   );
