@@ -1,30 +1,107 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface DungeonSelectMenuProps {
   onSelectDungeon: (dungeonType: string) => void;
   onBack: () => void;
+  userId?: number;
 }
 
 interface DungeonLocation {
   id: string;
   name: string;
   description: string;
+  subject: string;
+  flavorText: string;
+  difficulty: 1 | 2 | 3 | 4 | 5;
   x: number;
   y: number;
   building: 'castle' | 'tower' | 'temple' | 'cabin' | 'fortress' | 'mine';
   available: boolean;
   isDaily?: boolean;
+  unlockCondition?: string;
+}
+
+interface DungeonProgress {
+  elo: number | null;
+  questionsAnswered: number;
+  correctAnswers: number;
 }
 
 const dungeonLocations: DungeonLocation[] = [
-  { id: 'daily', name: 'Königsburg', description: 'Daily Dungeon', x: 50, y: 45, building: 'castle', available: true, isDaily: true },
-  { id: 'mathe', name: 'Turm der Zahlen', description: 'Mathematik', x: 20, y: 30, building: 'tower', available: false },
-  { id: 'physik', name: 'Tempel der Kräfte', description: 'Physik', x: 75, y: 25, building: 'temple', available: false },
-  { id: 'chemie', name: 'Alchemistenhütte', description: 'Chemie', x: 15, y: 65, building: 'cabin', available: false },
-  { id: 'geschichte', name: 'Zeitmine', description: 'Geschichte', x: 82, y: 70, building: 'mine', available: false },
-  { id: 'biologie', name: 'Festung des Lebens', description: 'Biologie', x: 55, y: 78, building: 'fortress', available: false },
+  {
+    id: 'daily',
+    name: 'Königsburg',
+    description: 'Tägliche Herausforderung',
+    subject: 'Gemischt',
+    flavorText: 'Jeden Tag neue Fragen aus allen Fächern. Perfekt zum Üben!',
+    difficulty: 3,
+    x: 50, y: 45,
+    building: 'castle',
+    available: true,
+    isDaily: true
+  },
+  {
+    id: 'mathe',
+    name: 'Turm der Zahlen',
+    description: 'Mathematik',
+    subject: 'Mathematik',
+    flavorText: 'Löse knifflige Rechenaufgaben und bezwinge die Zahlengoblins!',
+    difficulty: 3,
+    x: 20, y: 30,
+    building: 'tower',
+    available: false,
+    unlockCondition: 'Erreiche ELO 5 im Daily Dungeon'
+  },
+  {
+    id: 'physik',
+    name: 'Tempel der Kräfte',
+    description: 'Physik',
+    subject: 'Physik',
+    flavorText: 'Meistere die Gesetze der Natur in diesem mystischen Tempel.',
+    difficulty: 4,
+    x: 75, y: 25,
+    building: 'temple',
+    available: false,
+    unlockCondition: 'Erreiche ELO 5 im Daily Dungeon'
+  },
+  {
+    id: 'chemie',
+    name: 'Alchemistenhütte',
+    description: 'Chemie',
+    subject: 'Chemie',
+    flavorText: 'Mische Elemente und entdecke die Geheimnisse der Alchemie.',
+    difficulty: 4,
+    x: 15, y: 65,
+    building: 'cabin',
+    available: false,
+    unlockCondition: 'Erreiche ELO 5 im Daily Dungeon'
+  },
+  {
+    id: 'geschichte',
+    name: 'Zeitmine',
+    description: 'Geschichte',
+    subject: 'Geschichte',
+    flavorText: 'Reise durch die Zeitalter und grabe nach historischem Wissen.',
+    difficulty: 2,
+    x: 82, y: 70,
+    building: 'mine',
+    available: false,
+    unlockCondition: 'Bald verfügbar...'
+  },
+  {
+    id: 'biologie',
+    name: 'Festung des Lebens',
+    description: 'Biologie',
+    subject: 'Biologie',
+    flavorText: 'Erforsche die Wunder des Lebens in dieser grünen Festung.',
+    difficulty: 3,
+    x: 55, y: 78,
+    building: 'fortress',
+    available: false,
+    unlockCondition: 'Bald verfügbar...'
+  },
 ];
 
 // Castle - Main daily dungeon
@@ -171,7 +248,274 @@ function BuildingComponent({ building, glow }: { building: DungeonLocation['buil
   }
 }
 
-function DungeonMarker({ location, onClick }: { location: DungeonLocation; onClick: () => void }) {
+// Difficulty stars component
+function DifficultyStars({ difficulty, size = 14 }: { difficulty: number; size?: number }) {
+  return (
+    <div style={{ display: 'flex', gap: '2px' }}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <svg key={star} width={size} height={size} viewBox="0 0 24 24">
+          <path
+            d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+            fill={star <= difficulty ? '#FFD700' : '#3D3D3D'}
+            stroke={star <= difficulty ? '#DAA520' : '#555'}
+            strokeWidth="1"
+          />
+        </svg>
+      ))}
+    </div>
+  );
+}
+
+// ELO Progress bar
+function EloProgressBar({ elo, label }: { elo: number | null; label: string }) {
+  const displayElo = elo ?? 0;
+  const percentage = (displayElo / 10) * 100;
+
+  return (
+    <div style={{ marginBottom: '8px' }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        marginBottom: '4px',
+        fontSize: '11px',
+        color: '#aaa'
+      }}>
+        <span>{label}</span>
+        <span style={{ color: elo === null ? '#666' : '#FFD700' }}>
+          {elo === null ? 'Neu' : `${displayElo}/10`}
+        </span>
+      </div>
+      <div style={{
+        width: '100%',
+        height: '8px',
+        backgroundColor: '#2a2a2a',
+        borderRadius: '4px',
+        overflow: 'hidden',
+        border: '1px solid #444'
+      }}>
+        <div style={{
+          width: `${percentage}%`,
+          height: '100%',
+          background: elo === null
+            ? '#444'
+            : `linear-gradient(90deg, #4a7c3f, #7cb342)`,
+          borderRadius: '3px',
+          transition: 'width 0.3s ease'
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// Info Tooltip component
+function DungeonTooltip({ location, progress, visible }: {
+  location: DungeonLocation;
+  progress?: DungeonProgress;
+  visible: boolean;
+}) {
+  if (!visible) return null;
+
+  const accuracy = progress && progress.questionsAnswered > 0
+    ? Math.round((progress.correctAnswers / progress.questionsAnswered) * 100)
+    : null;
+
+  return (
+    <div style={{
+      position: 'absolute',
+      bottom: '110%',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      width: '280px',
+      backgroundColor: 'rgba(20, 15, 10, 0.98)',
+      border: '3px solid #5D4E37',
+      borderRadius: '12px',
+      padding: '16px',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)',
+      zIndex: 1000,
+      animation: 'tooltipFadeIn 0.2s ease-out',
+    }}>
+      {/* Header with name and subject badge */}
+      <div style={{ marginBottom: '12px' }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          marginBottom: '4px'
+        }}>
+          <h3 style={{
+            margin: 0,
+            color: '#FFD700',
+            fontSize: '18px',
+            fontWeight: 700,
+            textShadow: '0 2px 4px rgba(0,0,0,0.5)'
+          }}>
+            {location.name}
+          </h3>
+          {location.isDaily && (
+            <span style={{
+              backgroundColor: '#FFD700',
+              color: '#000',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              fontSize: '10px',
+              fontWeight: 700,
+              textTransform: 'uppercase'
+            }}>
+              Daily
+            </span>
+          )}
+        </div>
+        <div style={{
+          display: 'inline-block',
+          backgroundColor: 'rgba(74, 124, 63, 0.3)',
+          border: '1px solid #4a7c3f',
+          color: '#7cb342',
+          padding: '2px 10px',
+          borderRadius: '12px',
+          fontSize: '12px',
+          fontWeight: 600
+        }}>
+          {location.subject}
+        </div>
+      </div>
+
+      {/* Difficulty */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        marginBottom: '12px',
+        padding: '8px 10px',
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        borderRadius: '6px'
+      }}>
+        <span style={{ color: '#888', fontSize: '12px' }}>Schwierigkeit:</span>
+        <DifficultyStars difficulty={location.difficulty} />
+      </div>
+
+      {/* Flavor text */}
+      <p style={{
+        margin: '0 0 12px 0',
+        color: '#bbb',
+        fontSize: '13px',
+        lineHeight: '1.4',
+        fontStyle: 'italic',
+        borderLeft: '3px solid #5D4E37',
+        paddingLeft: '10px'
+      }}>
+        {location.flavorText}
+      </p>
+
+      {/* Progress section - only show for available dungeons */}
+      {location.available && progress && (
+        <div style={{
+          borderTop: '1px solid #3D3D3D',
+          paddingTop: '12px',
+          marginTop: '12px'
+        }}>
+          <div style={{
+            color: '#888',
+            fontSize: '11px',
+            marginBottom: '8px',
+            textTransform: 'uppercase',
+            letterSpacing: '1px'
+          }}>
+            Dein Fortschritt
+          </div>
+
+          <EloProgressBar elo={progress.elo} label="ELO-Score" />
+
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: '12px',
+            color: '#aaa',
+            marginTop: '8px'
+          }}>
+            <span>
+              Fragen: <span style={{ color: '#fff' }}>{progress.questionsAnswered}</span>
+            </span>
+            {accuracy !== null && (
+              <span>
+                Genauigkeit: <span style={{
+                  color: accuracy >= 70 ? '#7cb342' : accuracy >= 40 ? '#FFD700' : '#ff6b6b'
+                }}>{accuracy}%</span>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Unlock condition for locked dungeons */}
+      {!location.available && location.unlockCondition && (
+        <div style={{
+          borderTop: '1px solid #3D3D3D',
+          paddingTop: '12px',
+          marginTop: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <span style={{ fontSize: '16px' }}>🔒</span>
+          <span style={{
+            color: '#ff6b6b',
+            fontSize: '12px',
+            fontWeight: 500
+          }}>
+            {location.unlockCondition}
+          </span>
+        </div>
+      )}
+
+      {/* Enter hint for available dungeons */}
+      {location.available && (
+        <div style={{
+          marginTop: '12px',
+          textAlign: 'center',
+          color: '#7cb342',
+          fontSize: '12px',
+          fontWeight: 600,
+          padding: '8px',
+          backgroundColor: 'rgba(74, 124, 63, 0.2)',
+          borderRadius: '6px',
+          border: '1px solid rgba(74, 124, 63, 0.3)'
+        }}>
+          Klicken zum Betreten
+        </div>
+      )}
+
+      {/* Tooltip arrow */}
+      <div style={{
+        position: 'absolute',
+        bottom: '-10px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 0,
+        height: 0,
+        borderLeft: '10px solid transparent',
+        borderRight: '10px solid transparent',
+        borderTop: '10px solid #5D4E37',
+      }} />
+      <div style={{
+        position: 'absolute',
+        bottom: '-7px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 0,
+        height: 0,
+        borderLeft: '8px solid transparent',
+        borderRight: '8px solid transparent',
+        borderTop: '8px solid rgba(20, 15, 10, 0.98)',
+      }} />
+    </div>
+  );
+}
+
+function DungeonMarker({ location, onClick, progress }: {
+  location: DungeonLocation;
+  onClick: () => void;
+  progress?: DungeonProgress;
+}) {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -188,6 +532,9 @@ function DungeonMarker({ location, onClick }: { location: DungeonLocation; onCli
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Info Tooltip */}
+      <DungeonTooltip location={location} progress={progress} visible={isHovered} />
+
       <div style={{
         transform: isHovered && location.available ? 'scale(1.15) translateY(-5px)' : 'scale(1)',
         transition: 'transform 0.2s ease',
@@ -239,27 +586,6 @@ function DungeonMarker({ location, onClick }: { location: DungeonLocation; onCli
           {location.description}
         </div>
       </div>
-
-      {/* Unavailable tooltip */}
-      {isHovered && !location.available && (
-        <div style={{
-          position: 'absolute',
-          bottom: '110%',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          backgroundColor: 'rgba(0,0,0,0.95)',
-          border: '2px solid #ff6b6b',
-          borderRadius: '6px',
-          padding: '8px 14px',
-          whiteSpace: 'nowrap',
-          fontSize: '13px',
-          color: '#ff6b6b',
-          fontWeight: 600,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-        }}>
-          🔒 Bald verfügbar...
-        </div>
-      )}
     </div>
   );
 }
@@ -462,7 +788,76 @@ function Landscape() {
   );
 }
 
-export default function DungeonSelectMenu({ onSelectDungeon, onBack }: DungeonSelectMenuProps) {
+export default function DungeonSelectMenu({ onSelectDungeon, onBack, userId }: DungeonSelectMenuProps) {
+  // State for progress data per dungeon
+  const [progressData, setProgressData] = useState<Record<string, DungeonProgress>>({});
+
+  // Load progress data from API
+  useEffect(() => {
+    async function loadProgress() {
+      if (!userId) return;
+
+      try {
+        // Load session ELO scores
+        const response = await fetch(`/api/session-elo?userId=${userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          const progress: Record<string, DungeonProgress> = {};
+
+          // Map API data to progress format
+          // Daily dungeon gets average of all subjects
+          let totalElo = 0;
+          let eloCount = 0;
+          let totalQuestions = 0;
+          let totalCorrect = 0;
+
+          for (const item of data) {
+            // Also fetch detailed stats for each subject
+            const statsResponse = await fetch(`/api/stats?userId=${userId}`);
+            if (statsResponse.ok) {
+              const statsData = await statsResponse.json();
+              const subjectStats = statsData[item.subjectKey];
+              if (subjectStats) {
+                let questions = 0;
+                let correct = 0;
+                for (const q of subjectStats.questions) {
+                  questions += q.correct + q.wrong + q.timeout;
+                  correct += q.correct;
+                }
+
+                // Map subject to dungeon ID
+                const dungeonId = item.subjectKey;
+                progress[dungeonId] = {
+                  elo: item.averageElo,
+                  questionsAnswered: questions,
+                  correctAnswers: correct
+                };
+
+                totalElo += item.averageElo || 0;
+                if (item.averageElo !== null) eloCount++;
+                totalQuestions += questions;
+                totalCorrect += correct;
+              }
+            }
+          }
+
+          // Set daily dungeon progress as average
+          progress['daily'] = {
+            elo: eloCount > 0 ? Math.round(totalElo / eloCount) : null,
+            questionsAnswered: totalQuestions,
+            correctAnswers: totalCorrect
+          };
+
+          setProgressData(progress);
+        }
+      } catch (error) {
+        console.error('Failed to load progress:', error);
+      }
+    }
+
+    loadProgress();
+  }, [userId]);
+
   return (
     <div
       style={{
@@ -485,6 +880,7 @@ export default function DungeonSelectMenu({ onSelectDungeon, onBack }: DungeonSe
           key={location.id}
           location={location}
           onClick={() => onSelectDungeon(location.id)}
+          progress={progressData[location.id]}
         />
       ))}
 
@@ -602,6 +998,16 @@ export default function DungeonSelectMenu({ onSelectDungeon, onBack }: DungeonSe
           50% {
             opacity: 0.85;
             transform: scale(1.03);
+          }
+        }
+        @keyframes tooltipFadeIn {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
           }
         }
       `}</style>
