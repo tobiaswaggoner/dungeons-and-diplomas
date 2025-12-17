@@ -298,6 +298,7 @@ export default function GameCanvas() {
     onItemDropped: handleItemDropped,
     inCombatRef: combat.inCombatRef,
     onStartCombat: combat.startCombat,
+    onPlayerDeath: combat.triggerDefeat,
     playerRef
   });
 
