@@ -68,7 +68,8 @@ export class Trashmob {
   attackTarget: { x: number; y: number } | null = null;
   // Wind-up time before attack can deal damage (gives player time to react)
   private static readonly ATTACK_WINDUP_TIME = 0.3; // seconds
-  canDealDamage: boolean = false; // Only true after wind-up completes
+  // IMPORTANT: Only true during active attack phase after wind-up, must be reset when attack ends
+  canDealDamage: boolean = false;
 
   // Type-specific movement state
   // Slime hop state
@@ -155,6 +156,7 @@ export class Trashmob {
     // Cancel attack if hit
     this.isAttacking = false;
     this.isLeaping = false;
+    this.canDealDamage = false; // Reset damage flag
     if (this.hp <= 0) {
       this.hp = 0;
       this.die();
@@ -169,6 +171,7 @@ export class Trashmob {
     this.aiState = AI_STATE.IDLE;
     this.isMoving = false;
     this.isAttacking = false;
+    this.canDealDamage = false; // Reset damage flag
   }
 
   /**
@@ -893,6 +896,7 @@ export class Trashmob {
   private startRatRetreat(): void {
     this.isRetreating = true;
     this.isMoving = true;
+    this.canDealDamage = false; // Reset damage flag when retreating
     // Set cooldown - rat will flee until this expires
     this.attackCooldown = ATTACK_COOLDOWNS[this.type];
   }
@@ -911,36 +915,67 @@ export class Trashmob {
       return;
     }
 
-    // Flee away from player
-    const dx = this.x - player.x;
-    const dy = this.y - player.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const speed = this.getSpeed() * tileSize * 1.5; // Fast flee
 
-    if (dist > 0) {
-      // Face away from player
-      if (Math.abs(dx) > Math.abs(dy)) {
-        this.direction = dx > 0 ? DIRECTION.RIGHT : DIRECTION.LEFT;
-      } else {
-        this.direction = dy > 0 ? DIRECTION.DOWN : DIRECTION.UP;
+    // Check all 8 directions (cardinal + diagonal) for escape routes
+    const directions = [
+      { dx: 1, dy: 0, dir: DIRECTION.RIGHT },
+      { dx: -1, dy: 0, dir: DIRECTION.LEFT },
+      { dx: 0, dy: 1, dir: DIRECTION.DOWN },
+      { dx: 0, dy: -1, dir: DIRECTION.UP },
+      { dx: 1, dy: 1, dir: DIRECTION.DOWN },   // down-right
+      { dx: -1, dy: 1, dir: DIRECTION.DOWN },  // down-left
+      { dx: 1, dy: -1, dir: DIRECTION.UP },    // up-right
+      { dx: -1, dy: -1, dir: DIRECTION.UP },   // up-left
+    ];
+
+    const playerCenterX = player.x + tileSize / 2;
+    const playerCenterY = player.y + tileSize / 2;
+
+    // Find the best escape direction
+    let bestDirection: { dx: number; dy: number; dir: Direction } | null = null;
+    let bestScore = -Infinity;
+
+    for (const dir of directions) {
+      // Normalize diagonal movement
+      const length = Math.sqrt(dir.dx * dir.dx + dir.dy * dir.dy);
+      const normDx = dir.dx / length;
+      const normDy = dir.dy / length;
+
+      const testX = this.x + normDx * speed * dt;
+      const testY = this.y + normDy * speed * dt;
+
+      // Check if this direction is passable
+      if (this.checkCollision(testX, testY, tileSize, dungeon, doorStates)) {
+        continue; // Can't go this way
       }
 
-      const speed = this.getSpeed() * tileSize * 1.5; // Fast flee
-      const moveX = (dx / dist) * speed * dt;
-      const moveY = (dy / dist) * speed * dt;
+      // Calculate how far this takes us from the player
+      const newCenterX = testX + tileSize / 2;
+      const newCenterY = testY + tileSize / 2;
+      const distToPlayer = Math.sqrt(
+        (newCenterX - playerCenterX) ** 2 + (newCenterY - playerCenterY) ** 2
+      );
 
-      const newX = this.x + moveX;
-      const newY = this.y + moveY;
+      if (distToPlayer > bestScore) {
+        bestScore = distToPlayer;
+        bestDirection = { dx: normDx, dy: normDy, dir: dir.dir };
+      }
+    }
 
-      let moved = false;
-      if (!this.checkCollision(newX, this.y, tileSize, dungeon, doorStates)) {
-        this.x = newX;
-        moved = true;
-      }
-      if (!this.checkCollision(this.x, newY, tileSize, dungeon, doorStates)) {
-        this.y = newY;
-        moved = true;
-      }
-      this.isMoving = moved;
+    // If we found a valid direction, move that way
+    if (bestDirection) {
+      const moveX = bestDirection.dx * speed * dt;
+      const moveY = bestDirection.dy * speed * dt;
+
+      this.x += moveX;
+      this.y += moveY;
+      this.direction = bestDirection.dir;
+      this.isMoving = true;
+    } else {
+      // Completely stuck in corner - stop retreating early and go back to following
+      this.isRetreating = false;
+      this.isMoving = false;
     }
   }
 
