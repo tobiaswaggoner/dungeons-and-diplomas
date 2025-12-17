@@ -6,8 +6,6 @@ import { PLAYER_MAX_HP, DIRECTION, INITIAL_PLAYER_BUFFS } from '@/lib/constants'
 import type { Player } from '@/lib/enemy';
 import type { Shrine } from '@/lib/constants';
 import LoginModal from './LoginModal';
-import DungeonSelectMenu from './DungeonSelectMenu';
-import SubcategoryMenu from './SubcategoryMenu';
 import SkillDashboard from './SkillDashboard';
 import CharacterPanel from './CharacterPanel';
 import CombatModal from './CombatModal';
@@ -70,10 +68,7 @@ export default function GameCanvas() {
   const [showPauseMenu, setShowPauseMenu] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
 
-  // Menu navigation states
-  const [showDungeonSelect, setShowDungeonSelect] = useState(false);
-  const [showSubcategorySelect, setShowSubcategorySelect] = useState(false);
-  const [selectedDungeonType, setSelectedDungeonType] = useState<string>('');
+  // Game state
   const [gameStarted, setGameStarted] = useState(false);
 
   // Audio settings
@@ -121,12 +116,12 @@ export default function GameCanvas() {
     }
   }, [userId]);
 
-  // Show dungeon select menu when user is already logged in (e.g. page reload)
+  // Start game automatically when user is logged in
   useEffect(() => {
-    if (userId && !showLogin && !gameStarted && !showDungeonSelect && !showSubcategorySelect) {
-      setShowDungeonSelect(true);
+    if (userId && !showLogin && !gameStarted) {
+      setGameStarted(true);
     }
-  }, [userId, showLogin, gameStarted, showDungeonSelect, showSubcategorySelect]);
+  }, [userId, showLogin, gameStarted]);
 
   // Background music state
   const musicTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -570,9 +565,8 @@ export default function GameCanvas() {
   const handlePauseMenuMainMenu = () => {
     setShowPauseMenu(false);
     gameState.gamePausedRef.current = false;
-    // Reset to dungeon select instead of full logout
     setGameStarted(false);
-    setShowDungeonSelect(true);
+    handleLogout();
   };
 
   const handlePauseMenuOptions = () => {
@@ -650,31 +644,7 @@ export default function GameCanvas() {
   const handleLoginWithElo = async (id: number, name: string, xp?: number) => {
     await handleLogin(id, name, xp);
     await loadSessionElos(id);
-    // Show dungeon select menu after login
-    setShowDungeonSelect(true);
-  };
-
-  // Menu navigation handlers
-  const handleDungeonSelect = (dungeonType: string) => {
-    setSelectedDungeonType(dungeonType);
-    setShowDungeonSelect(false);
-    setShowSubcategorySelect(true);
-  };
-
-  const handleDungeonSelectBack = () => {
-    setShowDungeonSelect(false);
-    handleLogout();
-  };
-
-  const handleSubcategorySelect = (subcategory: string) => {
-    setShowSubcategorySelect(false);
-    setGameStarted(true);
-    // Game starts automatically when gameStarted is true
-  };
-
-  const handleSubcategoryBack = () => {
-    setShowSubcategorySelect(false);
-    setShowDungeonSelect(true);
+    // Game starts automatically via useEffect when userId is set
   };
 
   // Calculate level info from current XP
@@ -699,23 +669,6 @@ export default function GameCanvas() {
       `}</style>
 
       {showLogin && <LoginModal onLogin={handleLoginWithElo} />}
-
-      {/* Dungeon Select Menu (Green) */}
-      {showDungeonSelect && !showLogin && (
-        <DungeonSelectMenu
-          onSelectDungeon={handleDungeonSelect}
-          onBack={handleDungeonSelectBack}
-        />
-      )}
-
-      {/* Subcategory Menu (Gray) */}
-      {showSubcategorySelect && !showLogin && (
-        <SubcategoryMenu
-          dungeonType={selectedDungeonType}
-          onSelectSubcategory={handleSubcategorySelect}
-          onBack={handleSubcategoryBack}
-        />
-      )}
 
       {!questionDatabase && !showLogin && gameStarted && (
         <div style={{
