@@ -382,8 +382,8 @@ export class GameEngine {
         this.trashmobDamageDealt.delete(trashmob);
       }
 
-      // Check contact damage - only during attacks and only once per attack
-      if (trashmob.isAttacking && !this.trashmobDamageDealt.has(trashmob)) {
+      // Check contact damage - only during attacks, after wind-up, and only once per attack
+      if (trashmob.isAttacking && trashmob.canDealDamage && !this.trashmobDamageDealt.has(trashmob)) {
         const distance = trashmob.getDistanceToPlayer(player, tileSize);
         if (distance < 0.6) { // Contact distance
           const damage = trashmob.getContactDamage();

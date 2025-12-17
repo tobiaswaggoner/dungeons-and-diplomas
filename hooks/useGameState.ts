@@ -27,6 +27,8 @@ interface UseGameStateProps {
   onStartCombat?: (enemy: any) => void;
   /** Callback when player dies outside of combat (from trashmob damage) */
   onPlayerDeath?: () => void;
+  /** Callback when player takes damage from trashmob (for visual feedback) */
+  onTrashmobDamage?: () => void;
   /** Shared player reference (owned by parent component) */
   playerRef?: React.MutableRefObject<Player>;
   /** Optional configuration for dependency injection (testing) */
@@ -44,6 +46,7 @@ export function useGameState({
   inCombatRef: externalInCombatRef,
   onStartCombat,
   onPlayerDeath,
+  onTrashmobDamage,
   playerRef: externalPlayerRef,
   config: userConfig
 }: UseGameStateProps) {
@@ -116,11 +119,16 @@ export function useGameState({
     if (playerRef.current.hp < 0) playerRef.current.hp = 0;
     onPlayerHpUpdate(playerRef.current.hp);
 
+    // Trigger visual feedback
+    if (onTrashmobDamage) {
+      onTrashmobDamage();
+    }
+
     // Check if player died from trashmob damage
     if (playerRef.current.hp <= 0 && onPlayerDeath) {
       onPlayerDeath();
     }
-  }, [onPlayerHpUpdate, onPlayerDeath]);
+  }, [onPlayerHpUpdate, onPlayerDeath, onTrashmobDamage]);
 
   // Handle melee attack (called on mouse click)
   // Takes mouse coordinates to calculate attack direction toward cursor

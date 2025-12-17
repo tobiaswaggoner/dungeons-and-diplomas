@@ -66,6 +66,9 @@ export class Trashmob {
   isAttacking: boolean = false;
   attackTimer: number = 0;
   attackTarget: { x: number; y: number } | null = null;
+  // Wind-up time before attack can deal damage (gives player time to react)
+  private static readonly ATTACK_WINDUP_TIME = 0.3; // seconds
+  canDealDamage: boolean = false; // Only true after wind-up completes
 
   // Type-specific movement state
   // Slime hop state
@@ -405,6 +408,7 @@ export class Trashmob {
   private startSlimeAttack(player: Player, tileSize: number): void {
     this.isAttacking = true;
     this.attackTimer = 0;
+    this.canDealDamage = false; // Wind-up - can't deal damage yet
     this.attackTarget = { x: player.x, y: player.y };
     this.hopPhase = 'rising';
     this.hopHeight = 0;
@@ -429,6 +433,11 @@ export class Trashmob {
   ): void {
     this.attackTimer += dt;
 
+    // Enable damage after wind-up time
+    if (!this.canDealDamage && this.attackTimer >= Trashmob.ATTACK_WINDUP_TIME) {
+      this.canDealDamage = true;
+    }
+
     // Faster hop during attack
     if (this.hopPhase === 'rising') {
       this.hopHeight += dt * tileSize * 5;
@@ -441,6 +450,7 @@ export class Trashmob {
         this.hopHeight = 0;
         this.hopPhase = 'grounded';
         this.isAttacking = false;
+        this.canDealDamage = false;
         this.attackCooldown = ATTACK_COOLDOWNS[this.type];
         this.isMoving = false;
         return;
@@ -579,6 +589,7 @@ export class Trashmob {
   private startBatAttack(player: Player, tileSize: number): void {
     this.isAttacking = true;
     this.attackTimer = 0;
+    this.canDealDamage = false; // Wind-up - can't deal damage yet
     this.attackTarget = { x: player.x, y: player.y };
     this.isMoving = true;
 
@@ -601,9 +612,15 @@ export class Trashmob {
   ): void {
     this.attackTimer += dt;
 
+    // Enable damage after wind-up time
+    if (!this.canDealDamage && this.attackTimer >= Trashmob.ATTACK_WINDUP_TIME) {
+      this.canDealDamage = true;
+    }
+
     // Swoop attack lasts 0.5 seconds
     if (this.attackTimer >= 0.5) {
       this.isAttacking = false;
+      this.canDealDamage = false;
       this.attackCooldown = ATTACK_COOLDOWNS[this.type];
       this.isMoving = false;
       return;
@@ -799,6 +816,7 @@ export class Trashmob {
   private startRatAttack(player: Player, tileSize: number): void {
     this.isAttacking = true;
     this.attackTimer = 0;
+    this.canDealDamage = false; // Wind-up - can't deal damage yet
     this.isMoving = false;
 
     // Face player
@@ -814,6 +832,8 @@ export class Trashmob {
   private startRatLeap(player: Player, tileSize: number): void {
     this.isLeaping = true;
     this.isMoving = true;
+    this.canDealDamage = true; // Leap is the damaging part
+    this.attackTimer = 0; // Reset timer for leap duration
 
     // Calculate leap velocity toward player
     const dx = player.x - this.x;
@@ -821,7 +841,7 @@ export class Trashmob {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist > 0) {
-      const leapSpeed = this.getSpeed() * tileSize * 8; // Long, fast leap
+      const leapSpeed = this.getSpeed() * tileSize * 4; // Slower, more dodgeable leap
       this.leapVelocity = {
         x: (dx / dist) * leapSpeed,
         y: (dy / dist) * leapSpeed
@@ -842,6 +862,7 @@ export class Trashmob {
     if (this.attackTimer >= 0.8) {
       this.isLeaping = false;
       this.isAttacking = false;
+      this.canDealDamage = false;
       this.leapVelocity = { x: 0, y: 0 };
       // Start retreat after leap - flee until cooldown ready
       this.startRatRetreat();
