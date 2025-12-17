@@ -25,6 +25,10 @@ interface UseGameStateProps {
   inCombatRef?: React.MutableRefObject<boolean>;
   /** Callback when combat should start (injected from useCombat) */
   onStartCombat?: (enemy: any) => void;
+  /** Callback when player dies outside of combat (from trashmob damage) */
+  onPlayerDeath?: () => void;
+  /** Callback when player takes damage from trashmob (for visual feedback) */
+  onTrashmobDamage?: () => void;
   /** Shared player reference (owned by parent component) */
   playerRef?: React.MutableRefObject<Player>;
   /** Optional configuration for dependency injection (testing) */
@@ -41,6 +45,8 @@ export function useGameState({
   onItemDropped,
   inCombatRef: externalInCombatRef,
   onStartCombat,
+  onPlayerDeath,
+  onTrashmobDamage,
   playerRef: externalPlayerRef,
   config: userConfig
 }: UseGameStateProps) {
@@ -112,7 +118,17 @@ export function useGameState({
     playerRef.current.hp -= damage;
     if (playerRef.current.hp < 0) playerRef.current.hp = 0;
     onPlayerHpUpdate(playerRef.current.hp);
-  }, [onPlayerHpUpdate]);
+
+    // Trigger visual feedback
+    if (onTrashmobDamage) {
+      onTrashmobDamage();
+    }
+
+    // Check if player died from trashmob damage
+    if (playerRef.current.hp <= 0 && onPlayerDeath) {
+      onPlayerDeath();
+    }
+  }, [onPlayerHpUpdate, onPlayerDeath, onTrashmobDamage]);
 
   // Handle melee attack (called on mouse click)
   // Takes mouse coordinates to calculate attack direction toward cursor
@@ -259,8 +275,15 @@ export function useGameState({
 
   const gameLoop = (timestamp: number) => {
     if (!gamePausedRef.current) {
-      const dt = (timestamp - lastTimeRef.current) / 1000;
+      let dt = (timestamp - lastTimeRef.current) / 1000;
       lastTimeRef.current = timestamp;
+
+      // Cap dt to prevent entities moving through walls after alt+tab or window blur
+      // Max 100ms (0.1s) per frame - if longer, game was paused/tabbed out
+      const MAX_DT = 0.1;
+      if (dt > MAX_DT) {
+        dt = MAX_DT;
+      }
 
       update(dt);
       render();

@@ -277,6 +277,11 @@ export function useCombat({
     onGameRestart();
   }, [playerRef, onPlayerHpUpdate, onGameRestart]);
 
+  // Trigger defeat from outside combat (e.g., trashmob damage)
+  const triggerDefeat = useCallback(() => {
+    dispatch({ type: 'SHOW_DEFEAT' });
+  }, []);
+
   // Derived state for backwards compatibility
   const inCombat = isInCombat(state);
   const showVictory = state.phase === 'victory';
@@ -297,6 +302,7 @@ export function useCombat({
     victoryXp: state.victoryXp,
     showDefeat,
     handleVictoryComplete,
-    handleDefeatRestart
+    handleDefeatRestart,
+    triggerDefeat
   };
 }
