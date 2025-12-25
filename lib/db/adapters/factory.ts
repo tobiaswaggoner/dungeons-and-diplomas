@@ -24,7 +24,8 @@ export function isVercel(): boolean {
  */
 export function isSupabaseConfigured(): boolean {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // Check for secret key (new) or service role key (legacy)
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   return !!(url && key);
 }
 
@@ -32,7 +33,7 @@ export function isSupabaseConfigured(): boolean {
  * Determine which adapter type to use based on environment
  */
 export function getAdapterType(): AdapterType {
-  // Use Supabase if URL and any key (service role or anon) are configured
+  // Use Supabase if URL and secret/service role key are configured
   if (isSupabaseConfigured()) {
     return 'supabase';
   }
@@ -41,7 +42,7 @@ export function getAdapterType(): AdapterType {
   if (isVercel()) {
     throw new Error(
       'Database not configured for Vercel deployment. ' +
-      'Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.'
+      'Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY environment variables.'
     );
   }
 
