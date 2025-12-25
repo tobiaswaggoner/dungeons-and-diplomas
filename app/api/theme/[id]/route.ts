@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTileTheme, getTilesets } from '@/lib/tiletheme/db';
 import { withErrorHandler } from '@/lib/api/errorHandler';
 
+// Cache themes for 1 hour, revalidate on-demand when theme is updated
+export const revalidate = 3600;
+
 export const GET = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -22,9 +25,5 @@ export const GET = withErrorHandler(async (
   // Also return tilesets so the client can load the images
   const tilesets = await getTilesets();
 
-  return NextResponse.json({ theme, tilesets }, {
-    headers: {
-      'Cache-Control': 'no-store, max-age=0',
-    },
-  });
+  return NextResponse.json({ theme, tilesets });
 }, 'fetch theme');
