@@ -22,5 +22,9 @@ export const GET = withErrorHandler(async (
   // Also return tilesets so the client can load the images
   const tilesets = await getTilesets();
 
-  return NextResponse.json({ theme, tilesets });
+  return NextResponse.json({ theme, tilesets }, {
+    headers: {
+      'Cache-Control': 'no-store, max-age=0',
+    },
+  });
 }, 'fetch theme');
