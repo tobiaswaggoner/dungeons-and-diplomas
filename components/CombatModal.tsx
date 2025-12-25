@@ -21,6 +21,8 @@ interface CombatModalProps {
   combatQuestion: (Question & { shuffledAnswers: string[]; correctIndex: number; elo: number | null }) | null;
   combatFeedback: string;
   onAnswerQuestion: (index: number) => void;
+  /** Index of wrong answer to grey out as hint, -1 if no hint */
+  hintedAnswerIndex?: number;
   // Dungeon data for background rendering
   player?: Player;
   dungeon?: TileType[][];
@@ -41,6 +43,7 @@ export default function CombatModal({
   combatQuestion,
   combatFeedback,
   onAnswerQuestion,
+  hintedAnswerIndex = -1,
   player,
   dungeon,
   roomMap,
@@ -160,6 +163,7 @@ export default function CombatModal({
           answers={combatQuestion.shuffledAnswers}
           onSelectAnswer={onAnswerQuestion}
           isHidden={isCombatAnimating}
+          hintedAnswerIndex={hintedAnswerIndex}
         />
       )}
 

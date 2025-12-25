@@ -16,6 +16,12 @@ import { CollisionDetector } from '../physics/CollisionDetector';
 import type { Player, EnemyUpdateContext } from './types';
 
 export class Enemy {
+  // Static counter for unique IDs
+  private static nextId = 1;
+
+  // Unique enemy ID
+  id: number;
+
   // Position and room
   x: number;
   y: number;
@@ -36,6 +42,10 @@ export class Enemy {
   level: number;
   subject: string;
 
+  // Shrine spawning
+  isFromShrine: boolean = false;
+  shrineId: number | null = null;
+
   // AI state
   aiState: AIStateType = AI_STATE.IDLE;
   waypoint: { x: number; y: number } | null = null;
@@ -55,6 +65,7 @@ export class Enemy {
   playerElo: number = 5;
 
   constructor(x: number, y: number, spriteName: string, roomId: number, level: number, subject: string) {
+    this.id = Enemy.nextId++;
     this.x = x;
     this.y = y;
     this.roomId = roomId;
@@ -154,6 +165,7 @@ export class Enemy {
     doorStates: Map<string, boolean>
   ): void {
     // Import dynamically to avoid circular dependency at module load time
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { EnemyAI } = require('./EnemyAI');
     EnemyAI.update(this, {
       dt,
@@ -174,6 +186,7 @@ export class Enemy {
    */
   draw(ctx: CanvasRenderingContext2D, rooms: Room[], tileSize: number, player?: Player, playerRoomIds?: Set<number>): void {
     // Import dynamically to avoid circular dependency at module load time
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { EnemyRenderer } = require('./EnemyRenderer');
     EnemyRenderer.draw(this, ctx, rooms, tileSize, player, playerRoomIds);
   }

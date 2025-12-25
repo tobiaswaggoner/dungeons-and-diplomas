@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Player } from '@/lib/enemy';
 import type { QuestionDatabase } from '@/lib/questions';
-import { DIRECTION, PLAYER_MAX_HP } from '@/lib/constants';
+import { DIRECTION, PLAYER_MAX_HP, INITIAL_PLAYER_BUFFS } from '@/lib/constants';
 import type { GameStateConfig } from '@/lib/types/gameState';
 import { resolveConfig } from '@/lib/types/gameState';
 import type { DungeonManager } from '@/lib/game/DungeonManager';
@@ -11,11 +11,15 @@ import type { MinimapRenderer } from '@/lib/rendering/MinimapRenderer';
 import { useKeyboardInput } from './useKeyboardInput';
 import { useTreasureCollection } from './useTreasureCollection';
 import { useFootsteps } from './useFootsteps';
+import { updateShieldRegen, updateHpRegen } from '@/lib/buff';
+import { getEffectsManager } from '@/lib/effects';
 
 interface UseGameStateProps {
   questionDatabase: QuestionDatabase | null;
   availableSubjects: string[];
   userId: number | null;
+  /** Whether the game has started (canvas is mounted) */
+  gameStarted: boolean;
   onPlayerHpUpdate: (hp: number) => void;
   onXpGained?: (amount: number) => void;
   onTreasureCollected?: (screenX: number, screenY: number, xpAmount: number) => void;
@@ -39,6 +43,7 @@ export function useGameState({
   questionDatabase,
   availableSubjects,
   userId,
+  gameStarted,
   onPlayerHpUpdate,
   onXpGained,
   onTreasureCollected,
@@ -74,7 +79,8 @@ export function useGameState({
     direction: DIRECTION.DOWN,
     isMoving: false,
     hp: PLAYER_MAX_HP,
-    maxHp: PLAYER_MAX_HP
+    maxHp: PLAYER_MAX_HP,
+    buffs: { ...INITIAL_PLAYER_BUFFS }
   });
   const playerRef = externalPlayerRef || fallbackPlayerRef;
 
@@ -118,6 +124,12 @@ export function useGameState({
     playerRef.current.hp -= damage;
     if (playerRef.current.hp < 0) playerRef.current.hp = 0;
     onPlayerHpUpdate(playerRef.current.hp);
+
+    // Trigger damage effects (red particles + screen shake)
+    const effectsManager = getEffectsManager();
+    const playerCenterX = playerRef.current.x + playerRef.current.width / 2;
+    const playerCenterY = playerRef.current.y + playerRef.current.height / 2;
+    effectsManager.onPlayerDamage(playerCenterX, playerCenterY, damage);
 
     // Trigger visual feedback
     if (onTrashmobDamage) {
@@ -168,8 +180,14 @@ export function useGameState({
       attackAngle
     );
 
-    // Remove dead trashmobs
+    // Trigger spark effects for each hit trashmob
     if (hits.length > 0) {
+      const effectsManager = getEffectsManager();
+      for (const trashmob of hits) {
+        const trashmobCenterX = trashmob.x * manager.tileSize + manager.tileSize / 2;
+        const trashmobCenterY = trashmob.y * manager.tileSize + manager.tileSize / 2;
+        effectsManager.onTrashmobHit(trashmobCenterX, trashmobCenterY);
+      }
       manager.trashmobs = manager.trashmobs.filter(t => t.alive);
     }
   }, []);
@@ -180,6 +198,10 @@ export function useGameState({
 
     const engine = gameEngineRef.current;
     const manager = dungeonManagerRef.current;
+    const effectsManager = getEffectsManager();
+
+    // Update effects system
+    effectsManager.update(dt);
 
     // Update attack state (cooldown timer)
     engine.updateAttackState(dt);
@@ -197,7 +219,8 @@ export function useGameState({
       doorStates: manager.doorStates,
       enemies: manager.enemies,
       treasures: manager.treasures,
-      onTreasureCollected: handleTreasureCollected
+      onTreasureCollected: handleTreasureCollected,
+      shrines: manager.shrines
     });
 
     engine.updateEnemies({
@@ -230,9 +253,42 @@ export function useGameState({
       manager.trashmobs = manager.trashmobs.filter(t => t.alive);
     }
 
+    // Update room exploration state (handles unexplored → exploring → explored)
+    engine.updateRoomState(
+      playerRef.current,
+      manager.tileSize,
+      manager.roomMap,
+      manager.rooms,
+      manager.enemies,
+      manager.trashmobs
+    );
+
     // Update footstep sounds
     if (!inCombatRef.current) {
       updateFootsteps(playerRef.current, manager.enemies, manager.tileSize);
+    }
+
+    // Update buff regeneration (shield + HP)
+    updateShieldRegen(playerRef.current, dt);
+    updateHpRegen(playerRef.current, dt);
+
+    // Spawn dust particles when player is moving
+    if (playerRef.current.isMoving && !inCombatRef.current) {
+      // Use tileSize instead of player.width/height (which are 0)
+      const playerFeetX = playerRef.current.x + manager.tileSize / 2;
+      const playerFeetY = playerRef.current.y + manager.tileSize;
+      effectsManager.onPlayerWalk(playerFeetX, playerFeetY, true);
+    }
+
+    // Check for room transitions
+    const playerTileX = Math.floor((playerRef.current.x + playerRef.current.width / 2) / manager.tileSize);
+    const playerTileY = Math.floor((playerRef.current.y + playerRef.current.height / 2) / manager.tileSize);
+    if (playerTileX >= 0 && playerTileX < manager.roomMap[0]?.length &&
+        playerTileY >= 0 && playerTileY < manager.roomMap.length) {
+      const currentRoomId = manager.roomMap[playerTileY][playerTileX];
+      if (currentRoomId >= 0) {
+        effectsManager.checkRoomTransition(currentRoomId);
+      }
     }
   };
 
@@ -257,20 +313,24 @@ export function useGameState({
         manager.renderMap,
         manager.doorStates,
         manager.darkTheme,
+        manager.shrines,
         manager.trashmobs,
         engine.isPlayerAttacking(),
         aimAngleRef.current
       );
     }
 
-    minimapRendererRef.current.render(
-      minimap,
-      playerRef.current,
-      manager.dungeon,
-      manager.roomMap,
-      manager.rooms,
-      manager.tileSize
-    );
+    minimapRendererRef.current.render({
+      canvas: minimap,
+      player: playerRef.current,
+      dungeon: manager.dungeon,
+      roomMap: manager.roomMap,
+      rooms: manager.rooms,
+      tileSize: manager.tileSize,
+      enemies: manager.enemies,
+      shrines: manager.shrines,
+      treasures: manager.treasures
+    });
   };
 
   const gameLoop = (timestamp: number) => {
@@ -300,7 +360,7 @@ export function useGameState({
         return;
       }
 
-      if (!questionDatabase) {
+      if (!questionDatabase || !gameStarted) {
         return;
       }
 
@@ -343,7 +403,7 @@ export function useGameState({
         config.scheduler.cancelFrame(gameLoopIdRef.current);
       }
     };
-  }, [questionDatabase, availableSubjects, userId]);
+  }, [questionDatabase, availableSubjects, userId, gameStarted]);
 
   // Mouse move handler for continuous aim tracking
   useEffect(() => {

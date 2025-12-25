@@ -1,14 +1,49 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import GameOverlay, { OVERLAY_STYLES } from './GameOverlay';
+import { api } from '@/lib/api';
+
+interface GameStats {
+  enemiesDefeated: number;
+  roomsExplored: number;
+  xpGained: number;
+  maxCombo: number;
+  playTimeSeconds: number;
+}
 
 interface DefeatOverlayProps {
   onRestart: () => void;
+  userId: number | null;
+  stats?: GameStats;
 }
 
-export default function DefeatOverlay({ onRestart }: DefeatOverlayProps) {
+export default function DefeatOverlay({ onRestart, userId, stats }: DefeatOverlayProps) {
   const [isRestarting, setIsRestarting] = useState(false);
+  const [playerScore, setPlayerScore] = useState<number | null>(null);
+  const [isNewPersonalBest, setIsNewPersonalBest] = useState(false);
+
+  useEffect(() => {
+    const saveHighscore = async () => {
+      try {
+        if (userId && stats) {
+          const result = await api.highscores.saveHighscore({
+            user_id: userId,
+            enemies_defeated: stats.enemiesDefeated,
+            rooms_explored: stats.roomsExplored,
+            xp_gained: stats.xpGained,
+            max_combo: stats.maxCombo,
+            play_time_seconds: stats.playTimeSeconds
+          });
+          setPlayerScore(result.score);
+          setIsNewPersonalBest(result.isNewPersonalBest);
+        }
+      } catch (error) {
+        console.error('Failed to save highscore:', error);
+      }
+    };
+    saveHighscore();
+  }, [userId, stats]);
 
   const handleRestart = () => {
     setIsRestarting(true);
@@ -35,21 +70,26 @@ export default function DefeatOverlay({ onRestart }: DefeatOverlayProps) {
           color: '#FF4444',
           textShadow: '0 0 20px rgba(255, 68, 68, 0.8), 0 0 40px rgba(255, 68, 68, 0.5), 4px 4px 8px rgba(0, 0, 0, 0.9)',
           animation: 'defeatShake 0.6s ease-out',
-          marginBottom: '40px'
+          marginBottom: '20px',
+          fontSize: '48px'
         }}
       >
         DEFEAT
       </div>
 
-      {/* Try Again Text */}
-      <div
-        style={{
-          ...OVERLAY_STYLES.subtitle,
-          marginBottom: '60px',
-        }}
-      >
-        Du wurdest besiegt!
-      </div>
+      {/* Score Display */}
+      {playerScore !== null && (
+        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+          <div style={{ fontSize: '32px', fontWeight: 'bold', color: isNewPersonalBest ? '#FFD700' : '#fff' }}>
+            {playerScore.toLocaleString()} Punkte
+          </div>
+          {isNewPersonalBest && (
+            <div style={{ fontSize: '18px', color: '#FFD700', marginTop: '8px' }}>
+              Neuer persoenlicher Rekord!
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Restart Button */}
       <button

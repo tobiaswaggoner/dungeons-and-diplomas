@@ -1,5 +1,5 @@
-import type { TileType, Room, Direction } from '../constants';
-import { PLAYER_ATTACK_CONE_ANGLE, PLAYER_ATTACK_RANGE } from '../constants';
+import type { TileType, Room, Shrine, Direction } from '../constants';
+import { SHRINE_RENDER_SIZE, PLAYER_ATTACK_CONE_ANGLE, PLAYER_ATTACK_RANGE } from '../constants';
 import type { Player } from '../enemy';
 import { SpriteSheetLoader } from '../SpriteSheetLoader';
 import { Enemy, Trashmob } from '../enemy';
@@ -8,6 +8,8 @@ import { VisibilityCalculator } from '../visibility';
 import { getTileRenderer } from './TileRenderer';
 import { getContext2D } from './canvasUtils';
 import { RENDER_COLORS } from '../ui/colors';
+import { getEffectsManager } from '../effects';
+import { getEntityTilePosition } from '../physics/TileCoordinates';
 
 /**
  * Main game renderer that orchestrates all rendering passes.
@@ -15,6 +17,67 @@ import { RENDER_COLORS } from '../ui/colors';
  */
 export class GameRenderer {
   private tileRenderer = getTileRenderer();
+  private pulsePhase = 0;
+  private shrineImage: HTMLImageElement | null = null;
+  private shrineImageLoaded = false;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      this.shrineImage = new Image();
+      this.shrineImage.onload = () => {
+        this.shrineImageLoaded = true;
+      };
+      this.shrineImage.src = '/Assets/shrine.png';
+    }
+  }
+
+  /**
+   * Render all shrines visible in player's rooms
+   */
+  private renderShrines(
+    ctx: CanvasRenderingContext2D,
+    shrines: Shrine[],
+    rooms: Room[],
+    tileSize: number,
+    playerRoomIds: Set<number>
+  ): void {
+    this.pulsePhase += 0.05;
+    if (this.pulsePhase > Math.PI * 2) {
+      this.pulsePhase = 0;
+    }
+
+    for (const shrine of shrines) {
+      if (!rooms[shrine.roomId]?.visible) continue;
+
+      // Calculate sprite size based on SHRINE_RENDER_SIZE
+      const spriteSize = tileSize * SHRINE_RENDER_SIZE;
+      // Center the sprite on the shrine position
+      const offsetX = (tileSize - spriteSize) / 2;
+      const offsetY = (tileSize - spriteSize) / 2;
+      const screenX = shrine.x * tileSize + offsetX;
+      const screenY = shrine.y * tileSize + offsetY;
+
+      ctx.save();
+
+      if (shrine.isActivated) {
+        ctx.globalAlpha = 0.5;
+        ctx.filter = 'grayscale(100%)';
+      } else if (shrine.isActive) {
+        ctx.shadowColor = '#ff4444';
+        ctx.shadowBlur = 25;
+      } else {
+        const glowIntensity = 10 + Math.sin(this.pulsePhase) * 5;
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = glowIntensity;
+      }
+
+      if (this.shrineImageLoaded && this.shrineImage) {
+        ctx.drawImage(this.shrineImage, screenX, screenY, spriteSize, spriteSize);
+      }
+
+      ctx.restore();
+    }
+  }
 
   /**
    * Render all enemies visible in player's rooms
@@ -32,6 +95,9 @@ export class GameRenderer {
     }
   }
 
+  // Debug counter for trashmob rendering
+  private trashmobRenderDebugCounter = 0;
+
   /**
    * Render all trashmobs visible in player's rooms
    */
@@ -42,6 +108,14 @@ export class GameRenderer {
     tileSize: number,
     playerRoomIds: Set<number>
   ): void {
+    // Debug log every 120 frames
+    this.trashmobRenderDebugCounter++;
+    if (this.trashmobRenderDebugCounter >= 120) {
+      this.trashmobRenderDebugCounter = 0;
+      const visibleCount = trashmobs.filter(t => t.alive && rooms[t.roomId]?.visible).length;
+      console.log(`[GameRenderer] Trashmobs total: ${trashmobs.length}, visible: ${visibleCount}`);
+    }
+
     for (const trashmob of trashmobs) {
       if (!trashmob.alive) continue;
 
@@ -140,6 +214,7 @@ export class GameRenderer {
     renderMap: RenderMap,
     doorStates: Map<string, boolean>,
     darkTheme: TileTheme | null,
+    shrines: Shrine[] = [],
     trashmobs: Trashmob[] = [],
     isAttacking: boolean = false,
     aimAngle?: number
@@ -155,48 +230,56 @@ export class GameRenderer {
     const dungeonWidth = renderMap.width;
     const dungeonHeight = renderMap.height;
 
-    const camX = player.x + tileSize / 2 - canvas.width / 2;
-    const camY = player.y + tileSize / 2 - canvas.height / 2;
+    // Get screen shake offset
+    const effectsManager = getEffectsManager();
+    const shakeOffset = effectsManager.getCameraOffset();
+
+    const camX = player.x + tileSize / 2 - canvas.width / 2 + shakeOffset.x;
+    const camY = player.y + tileSize / 2 - canvas.height / 2 + shakeOffset.y;
 
     ctx.save();
     ctx.translate(-Math.floor(camX), -Math.floor(camY));
 
-    // Clear with black
     ctx.fillStyle = RENDER_COLORS.BACKGROUND;
     ctx.fillRect(Math.floor(camX), Math.floor(camY), canvas.width, canvas.height);
 
-    // Calculate visible tile range
     const startCol = Math.floor(camX / tileSize);
     const endCol = startCol + Math.ceil(canvas.width / tileSize) + 1;
     const startRow = Math.floor(camY / tileSize);
     const endRow = startRow + Math.ceil(canvas.height / tileSize) + 1;
 
-    // Get player's current room(s) for visibility calculations
     const playerRoomIds = VisibilityCalculator.getPlayerRoomIds(player, tileSize, roomMap, dungeonWidth, dungeonHeight);
+    const { tx: playerTileX, ty: playerTileY } = getEntityTilePosition(player, tileSize);
 
-    // Pass 1: Render tiles (delegated to TileRenderer)
     this.tileRenderer.renderTiles(
       ctx, dungeon, roomMap, rooms, enemies, tileSize, renderMap, doorStates, darkTheme,
       startCol, endCol, startRow, endRow, dungeonWidth, dungeonHeight
     );
 
-    // Pass 2: Render fog of war dimming (delegated to TileRenderer)
     this.tileRenderer.renderFogOfWar(
       ctx, dungeon, roomMap, rooms, playerRoomIds, tileSize,
-      startCol, endCol, startRow, endRow, dungeonWidth, dungeonHeight
+      startCol, endCol, startRow, endRow, dungeonWidth, dungeonHeight,
+      playerTileX, playerTileY
     );
 
-    // Pass 3: Render enemies
+    this.renderShrines(ctx, shrines, rooms, tileSize, playerRoomIds);
+
     this.renderEnemies(ctx, enemies, rooms, tileSize, player, playerRoomIds);
 
-    // Pass 4: Render trashmobs
+    // Render trashmobs
     this.renderTrashmobs(ctx, trashmobs, rooms, tileSize, playerRoomIds);
 
-    // Pass 5: Render attack cone (before player so it's behind)
+    // Render attack cone (before player so it's behind)
     this.renderAttackCone(ctx, player, tileSize, isAttacking, aimAngle);
 
-    // Pass 6: Render player
+    // Render player
     this.renderPlayer(ctx, playerSprite, player, tileSize);
+
+    // Render particles (after game objects, before UI)
+    effectsManager.renderParticles(ctx, 0, 0); // Already translated by camera
+
+    // Render room transition overlay in world space (only on room area)
+    effectsManager.renderTransitionInWorldSpace(ctx);
 
     ctx.restore();
   }

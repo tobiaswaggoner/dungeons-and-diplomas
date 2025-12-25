@@ -21,6 +21,8 @@ export interface CombatState {
   askedQuestionIds: Set<number>;
   playerElo: number;
   questionStartTime: number;
+  /** Index of the wrong answer to hint (grey out), -1 if no hint */
+  hintedAnswerIndex: number;
 }
 
 /**
@@ -37,7 +39,8 @@ export const initialCombatState: CombatState = {
   victoryXp: 0,
   askedQuestionIds: new Set(),
   playerElo: 5, // Default middle ELO
-  questionStartTime: 0
+  questionStartTime: 0,
+  hintedAnswerIndex: -1
 };
 
 /**
@@ -46,7 +49,7 @@ export const initialCombatState: CombatState = {
 export type CombatAction =
   | { type: 'START_COMBAT'; enemy: Enemy; subjectDisplay: string }
   | { type: 'SET_PLAYER_ELO'; elo: number }
-  | { type: 'ASK_QUESTION'; question: SelectedQuestion; questionStartTime: number }
+  | { type: 'ASK_QUESTION'; question: SelectedQuestion; questionStartTime: number; hintedAnswerIndex: number }
   | { type: 'SHOW_FEEDBACK'; feedback: string; enemyHp: number }
   | { type: 'SHOW_VICTORY'; xp: number }
   | { type: 'SHOW_DEFEAT' }
@@ -91,7 +94,8 @@ export function combatReducer(state: CombatState, action: CombatAction): CombatS
         question: action.question,
         feedback: '',
         questionStartTime: action.questionStartTime,
-        askedQuestionIds: new Set([...state.askedQuestionIds, action.question.id])
+        askedQuestionIds: new Set([...state.askedQuestionIds, action.question.id]),
+        hintedAnswerIndex: action.hintedAnswerIndex
       };
 
     case 'SHOW_FEEDBACK':

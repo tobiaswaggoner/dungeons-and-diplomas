@@ -13,6 +13,7 @@ import * as xp from './xp';
 import * as auth from './auth';
 import * as theme from './theme';
 import * as stats from './stats';
+import * as highscores from './highscores';
 
 export const api = {
   elo,
@@ -21,7 +22,8 @@ export const api = {
   xp,
   auth,
   theme,
-  stats
+  stats,
+  highscores
 };
 
 // Re-export types for convenience
@@ -31,6 +33,7 @@ export type { XpLogEntry, AddXpResponse } from './xp';
 export type { LoginRequest, LoginResponse } from './auth';
 export type { ThemeResponse } from './theme';
 export type { StatsData, SubjectStats, QuestionStats } from './stats';
+export type { Highscore, SaveHighscoreRequest, SaveHighscoreResponse } from './highscores';
 export { ApiError } from './client';
 
 // Re-export validation utilities for API routes

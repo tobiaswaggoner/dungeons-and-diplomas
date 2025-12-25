@@ -5,7 +5,7 @@
  * to improve readability and testability (Parameter Object Pattern).
  */
 
-import type { TileType, Room, KeyboardState } from '../constants';
+import type { TileType, Room, KeyboardState, Shrine } from '../constants';
 import type { Player } from '../enemy';
 import type { SpriteSheetLoader } from '../SpriteSheetLoader';
 import type { Enemy } from '../enemy';
@@ -45,6 +45,8 @@ export interface UpdatePlayerContext {
   treasures?: Set<string>;
   /** Optional callback when treasure is collected */
   onTreasureCollected?: (x: number, y: number) => void;
+  /** Optional array of shrines for collision detection */
+  shrines?: Shrine[];
 }
 
 // ============================================================================

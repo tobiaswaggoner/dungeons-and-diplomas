@@ -1,7 +1,7 @@
 /**
  * Types for the enemy module
  */
-import type { Direction, TileType } from '../constants';
+import type { Direction, TileType, PlayerBuffs } from '../constants';
 
 /**
  * Player interface - represents the player entity
@@ -16,6 +16,7 @@ export interface Player {
   isMoving: boolean;
   hp: number;
   maxHp: number;
+  buffs?: PlayerBuffs;
 }
 
 /**

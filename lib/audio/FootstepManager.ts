@@ -49,6 +49,9 @@ export class FootstepManager {
   // Currently playing audio nodes (for cleanup)
   private activeNodes: Set<AudioBufferSourceNode> = new Set();
 
+  // Volume multiplier (0-1) - set from audio settings
+  private volumeMultiplier: number = 1.0;
+
   /**
    * Initialize the audio context and load all footstep sounds
    */
@@ -100,6 +103,21 @@ export class FootstepManager {
   }
 
   /**
+   * Set volume multiplier (0-1)
+   * This is combined with master volume from audio settings
+   */
+  setVolumeMultiplier(volume: number): void {
+    this.volumeMultiplier = Math.max(0, Math.min(1, volume));
+  }
+
+  /**
+   * Get current volume multiplier
+   */
+  getVolumeMultiplier(): number {
+    return this.volumeMultiplier;
+  }
+
+  /**
    * Play a footstep sound with optional pitch shift
    * @param volume Volume (0-1)
    * @param pitchShift Playback rate (1 = normal, <1 = deeper, >1 = higher)
@@ -116,9 +134,9 @@ export class FootstepManager {
     source.buffer = soundBuffer;
     source.playbackRate.value = pitchShift;
 
-    // Create gain node for volume
+    // Create gain node for volume (apply volume multiplier from settings)
     const gainNode = this.audioContext.createGain();
-    gainNode.gain.value = volume;
+    gainNode.gain.value = volume * this.volumeMultiplier;
 
     // Create stereo panner for spatial audio
     const pannerNode = this.audioContext.createStereoPanner();

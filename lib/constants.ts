@@ -91,6 +91,19 @@ export const COMBAT_TRIGGER_DISTANCE = 0.5; // tiles - distance to trigger comba
 export const COMBAT_FEEDBACK_DELAY = 1500; // milliseconds - delay before next question or ending combat
 
 // =============================================================================
+// Shrine constants
+// =============================================================================
+export const SHRINE_SPAWN_CHANCE = 0.10; // 10% chance per eligible room
+export const SHRINE_INTERACTION_RADIUS = 1.5; // tiles - distance to interact
+export const SHRINE_MIN_ROOM_SIZE = 5; // minimum room size for shrine
+export const SHRINE_ENEMY_SPAWN_RADIUS = 2.0; // tiles from shrine center
+export const SHRINE_MIN_ENEMIES = 1;
+export const SHRINE_MAX_ENEMIES = 2;
+export const SHRINE_HITBOX_SIZE = 0.7; // tiles - smaller hitbox for collision
+export const SHRINE_RENDER_SIZE = 1.0; // tiles - visual size of shrine
+export const SHRINE_MIN_PLAYER_DISTANCE = 1.5; // minimum distance from player for enemy spawn
+
+// =============================================================================
 // Melee Attack constants (for Trashmobs)
 // =============================================================================
 export const PLAYER_ATTACK_CONE_ANGLE = 75; // degrees
@@ -131,6 +144,13 @@ export const TRASHMOB_COLORS: Record<TrashmobType, string> = {
 // =============================================================================
 // Type definitions
 // =============================================================================
+
+// Room types including shrine
+export type RoomType = 'empty' | 'treasure' | 'combat' | 'shrine';
+
+// Room exploration states
+export type RoomState = 'unexplored' | 'exploring' | 'explored';
+
 export interface Room {
   id: number;
   x: number;
@@ -139,7 +159,8 @@ export interface Room {
   height: number;
   visible: boolean;
   neighbors: number[];
-  type: 'empty' | 'treasure' | 'combat';
+  type: RoomType;
+  state: RoomState;
 }
 
 export interface TileCoord {
@@ -151,3 +172,126 @@ export interface TileVariant {
   floor: TileCoord;
   wall: TileCoord;
 }
+
+// =============================================================================
+// Shrine types
+// =============================================================================
+export interface Shrine {
+  id: number;
+  x: number; // tile position X (center)
+  y: number; // tile position Y (center)
+  roomId: number;
+  isActivated: boolean; // already used (cannot be used again)
+  isActive: boolean; // currently in use (combat in progress)
+  spawnedEnemies: number[]; // IDs of spawned enemies
+  defeatedEnemies: number[]; // IDs of defeated enemies
+}
+
+// =============================================================================
+// Buff types
+// =============================================================================
+export type BuffType =
+  | 'hp_boost'
+  | 'shield'
+  | 'time_bonus'
+  | 'damage_boost'
+  | 'damage_reduction'
+  | 'regen';
+
+export interface Buff {
+  type: BuffType;
+  name: string;
+  description: string;
+  icon: string;
+  value?: number;
+  maxShield?: number;
+  regenRate?: number;
+  hpPerTick?: number;
+  tickInterval?: number;
+}
+
+export interface PlayerBuffs {
+  // HP system
+  maxHpBonus: number;
+
+  // Shield system
+  hasShield: boolean;
+  maxShield: number;
+  currentShield: number;
+  shieldRegenRate: number;
+
+  // Combat modifiers
+  timeBonus: number; // extra seconds for quiz
+  damageBoost: number; // extra damage on correct answer
+  damageReduction: number; // reduced damage on wrong answer
+
+  // Regeneration
+  regenRate: number; // HP per tick
+  regenInterval: number; // seconds between ticks
+
+  // Tracking
+  activeBuffs: BuffType[];
+}
+
+// Initial player buffs state
+export const INITIAL_PLAYER_BUFFS: PlayerBuffs = {
+  maxHpBonus: 0,
+  hasShield: false,
+  maxShield: 0,
+  currentShield: 0,
+  shieldRegenRate: 0,
+  timeBonus: 0,
+  damageBoost: 0,
+  damageReduction: 0,
+  regenRate: 0,
+  regenInterval: 3,
+  activeBuffs: [],
+};
+
+// Buff pool - all available buffs
+export const BUFF_POOL: Buff[] = [
+  {
+    type: 'hp_boost',
+    name: 'Vitalität',
+    description: '+25 Maximale HP',
+    icon: '❤️',
+    value: 25,
+  },
+  {
+    type: 'shield',
+    name: 'Schutzschild',
+    description: '20 Schild-HP, regeneriert 2/s',
+    icon: '🛡️',
+    maxShield: 20,
+    regenRate: 2,
+  },
+  {
+    type: 'time_bonus',
+    name: 'Zeitdehnung',
+    description: '+5 Sekunden Antwortzeit',
+    icon: '⏱️',
+    value: 5,
+  },
+  {
+    type: 'damage_boost',
+    name: 'Macht',
+    description: '+5 Schaden bei richtiger Antwort',
+    icon: '⚔️',
+    value: 5,
+  },
+  {
+    type: 'damage_reduction',
+    name: 'Widerstand',
+    description: '-3 Schaden bei falscher Antwort',
+    icon: '🛡️',
+    value: 3,
+  },
+  {
+    type: 'regen',
+    name: 'Heilung',
+    description: 'Regeneriere 1 HP alle 3 Sekunden',
+    icon: '💚',
+    hpPerTick: 1,
+    tickInterval: 3,
+  },
+];

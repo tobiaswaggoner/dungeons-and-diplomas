@@ -10,15 +10,17 @@ import {
   PLAYER_ATTACK_DAMAGE,
   DIRECTION_OFFSETS
 } from '../constants';
-import type { TileType, Room } from '../constants';
+import type { TileType, Room, Shrine } from '../constants';
 import type { Player } from '../enemy';
 import { Enemy } from '../enemy';
 import { Trashmob } from '../enemy/Trashmob';
 import { CollisionDetector } from '../physics/CollisionDetector';
+import { checkShrineCollision } from '../physics/ShrineCollision';
 import { getEntityTilePosition } from '../physics/TileCoordinates';
 import { DirectionCalculator } from '../movement/DirectionCalculator';
 import { getTargetsInAttackCone, angleToDirection, type PlayerAttackState, createAttackState, canAttack } from '../combat/MeleeAttack';
 import type { UpdatePlayerContext, UpdateEnemiesContext, UpdateTrashmobsContext } from '../types/game';
+import { getEffectsManager } from '../effects';
 
 export class GameEngine {
   private lastSpacePressed: boolean = false;
@@ -119,9 +121,20 @@ export class GameEngine {
     y: number,
     tileSize: number,
     dungeon: TileType[][],
-    doorStates: Map<string, boolean>
+    doorStates: Map<string, boolean>,
+    shrines?: Shrine[]
   ): boolean {
-    return CollisionDetector.checkPlayerCollision(x, y, tileSize, dungeon, doorStates);
+    // Check tile collision first
+    if (CollisionDetector.checkPlayerCollision(x, y, tileSize, dungeon, doorStates)) {
+      return true;
+    }
+    // Check shrine collision if shrines are provided
+    if (shrines && shrines.length > 0) {
+      if (checkShrineCollision(x, y, tileSize, shrines)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public updateFogOfWar(
@@ -136,8 +149,108 @@ export class GameEngine {
       const roomId = roomMap[playerTileY][playerTileX];
       if (roomId >= 0 && rooms[roomId] && !rooms[roomId].visible) {
         rooms[roomId].visible = true;
+
+        // Trigger room reveal particle effect only in the newly revealed room
+        const room = rooms[roomId];
+        getEffectsManager().onRoomRevealed(room.x, room.y, room.width, room.height, tileSize);
       }
     }
+  }
+
+  /**
+   * Update room exploration states based on player position and enemies.
+   * Handles the new exploration mechanic:
+   * - unexplored → exploring (when player enters)
+   * - exploring → explored (when all enemies defeated)
+   */
+  public updateRoomState(
+    player: Player,
+    tileSize: number,
+    roomMap: number[][],
+    rooms: Room[],
+    enemies: Enemy[],
+    trashmobs: Trashmob[]
+  ): void {
+    const { tx: playerTileX, ty: playerTileY } = getEntityTilePosition(player, tileSize);
+
+    if (playerTileX < 0 || playerTileX >= DUNGEON_WIDTH ||
+        playerTileY < 0 || playerTileY >= DUNGEON_HEIGHT) {
+      return;
+    }
+
+    const playerRoomId = roomMap[playerTileY][playerTileX];
+    if (playerRoomId < 0 || !rooms[playerRoomId]) return;
+
+    const room = rooms[playerRoomId];
+
+    // Count enemies in this room
+    const enemiesInRoom = this.countEnemiesInRoom(playerRoomId, enemies, trashmobs, roomMap, tileSize);
+
+    // Handle state transitions
+    if (room.state === 'unexplored') {
+      // Player enters unexplored room → start exploring
+      room.state = 'exploring';
+      room.visible = true;
+
+      // Trigger circular reveal effect
+      getEffectsManager().onRoomEntered(room, player, tileSize);
+
+      // If no enemies, immediately transition to explored after reveal
+      if (enemiesInRoom === 0) {
+        // Small delay before marking as explored (let reveal animation play)
+        setTimeout(() => {
+          if (room.state === 'exploring') {
+            room.state = 'explored';
+            getEffectsManager().onRoomCleared(room, tileSize);
+          }
+        }, 400); // Match reveal animation duration
+      }
+    } else if (room.state === 'exploring') {
+      // Check if all enemies in room are defeated
+      if (enemiesInRoom === 0) {
+        room.state = 'explored';
+        getEffectsManager().onRoomCleared(room, tileSize);
+      }
+    }
+  }
+
+  /**
+   * Count alive enemies (both quiz enemies and trashmobs) in a specific room
+   */
+  private countEnemiesInRoom(
+    roomId: number,
+    enemies: Enemy[],
+    trashmobs: Trashmob[],
+    roomMap: number[][],
+    tileSize: number
+  ): number {
+    let count = 0;
+
+    // Count quiz enemies
+    for (const enemy of enemies) {
+      if (enemy.alive) {
+        const { tx, ty } = getEntityTilePosition(enemy, tileSize);
+        if (tx >= 0 && tx < DUNGEON_WIDTH && ty >= 0 && ty < DUNGEON_HEIGHT) {
+          if (roomMap[ty][tx] === roomId) {
+            count++;
+          }
+        }
+      }
+    }
+
+    // Count trashmobs
+    for (const trashmob of trashmobs) {
+      if (trashmob.alive) {
+        const { tx, ty } = getEntityTilePosition(trashmob, tileSize);
+        if (tx >= 0 && tx < DUNGEON_WIDTH && ty >= 0 && ty < DUNGEON_HEIGHT) {
+          if (roomMap[ty][tx] === roomId) {
+            count++;
+          }
+        }
+      }
+    }
+
+    return count;
   }
 
   /**
@@ -240,7 +353,8 @@ export class GameEngine {
       doorStates,
       enemies,
       treasures,
-      onTreasureCollected
+      onTreasureCollected,
+      shrines
     } = ctx;
 
     if (inCombat) return;
@@ -291,11 +405,11 @@ export class GameEngine {
       const newX = player.x + dx;
       const newY = player.y + dy;
 
-      // Use player collision that respects door states
-      if (!this.checkPlayerCollision(newX, player.y, tileSize, dungeon, doorStates)) {
+      // Use player collision that respects door states and shrines
+      if (!this.checkPlayerCollision(newX, player.y, tileSize, dungeon, doorStates, shrines)) {
         player.x = newX;
       }
-      if (!this.checkPlayerCollision(player.x, newY, tileSize, dungeon, doorStates)) {
+      if (!this.checkPlayerCollision(player.x, newY, tileSize, dungeon, doorStates, shrines)) {
         player.y = newY;
       }
 

@@ -1,5 +1,5 @@
-import { MIN_ROOM_SIZE, MAX_ROOM_SIZE, TILE } from '../constants';
-import type { TileType, Room, DungeonConfig } from '../constants';
+import { MIN_ROOM_SIZE, MAX_ROOM_SIZE, TILE, SHRINE_MIN_ROOM_SIZE } from '../constants';
+import type { TileType, Room, DungeonConfig, RoomType } from '../constants';
 import { getStructureRng } from './DungeonRNG';
 
 export class BSPNode {
@@ -89,10 +89,18 @@ export class BSPNode {
       this.roomId = rooms.length;
 
       // Assign room type with weighted random selection
+      // Shrine: 10% (only for rooms >= SHRINE_MIN_ROOM_SIZE)
+      // Treasure: 10%
+      // Combat: 10%
+      // Empty: 70%
       const rng = getStructureRng();
       const typeRoll = rng.next() * 10;
-      let roomType: 'empty' | 'treasure' | 'combat';
-      if (typeRoll < 2) {
+      const canBeShrine = this.width >= SHRINE_MIN_ROOM_SIZE && this.height >= SHRINE_MIN_ROOM_SIZE;
+
+      let roomType: RoomType;
+      if (typeRoll < 1 && canBeShrine) {
+        roomType = 'shrine';
+      } else if (typeRoll < 2) {
         roomType = 'treasure';
       } else if (typeRoll < 3) {
         roomType = 'combat';
@@ -108,7 +116,8 @@ export class BSPNode {
         height: this.height,
         visible: false,
         neighbors: [],
-        type: roomType
+        type: roomType,
+        state: 'unexplored'
       });
 
       // Fill entire partition with floor and mark tiles with room ID
