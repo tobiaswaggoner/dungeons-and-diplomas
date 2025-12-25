@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { getTileTheme, updateTileTheme, deleteTileTheme } from '@/lib/tiletheme/db';
 import { withErrorHandler } from '@/lib/api/errorHandler';
 
@@ -21,16 +22,20 @@ export const PUT = withErrorHandler(async (
   { params }: { params: Promise<{ id: string }> }
 ) => {
   const { id } = await params;
+  const themeId = parseInt(id);
   const body = await request.json();
 
-  const theme = await getTileTheme(parseInt(id));
+  const theme = await getTileTheme(themeId);
   if (!theme) {
     return NextResponse.json({ error: 'Theme not found' }, { status: 404 });
   }
 
-  await updateTileTheme(parseInt(id), body);
+  await updateTileTheme(themeId, body);
 
-  const updatedTheme = await getTileTheme(parseInt(id));
+  // Invalidate cached theme data
+  revalidatePath(`/api/theme/${themeId}`);
+
+  const updatedTheme = await getTileTheme(themeId);
   return NextResponse.json(updatedTheme);
 }, 'update theme');
 
@@ -39,6 +44,12 @@ export const DELETE = withErrorHandler(async (
   { params }: { params: Promise<{ id: string }> }
 ) => {
   const { id } = await params;
-  await deleteTileTheme(parseInt(id));
+  const themeId = parseInt(id);
+
+  await deleteTileTheme(themeId);
+
+  // Invalidate cached theme data
+  revalidatePath(`/api/theme/${themeId}`);
+
   return NextResponse.json({ success: true });
 }, 'delete theme');

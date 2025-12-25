@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTileTheme, getTilesets } from '@/lib/tiletheme/db';
 import { withErrorHandler } from '@/lib/api/errorHandler';
 
+// Cache themes for 1 hour, revalidate on-demand when theme is updated
+export const revalidate = 3600;
+
 export const GET = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
